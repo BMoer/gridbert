@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="hero">
+    <h1>Hey! Wirf mir deine Stromrechnung rüber 📄</h1>
+    <p class="subtitle">Ich analysiere deinen Tarif, vergleiche Alternativen und zeig dir, was du sparst.</p>
+</div>
+
+{% if error %}
+<div class="error-box">
+    ⚠️ {{ error }}
+</div>
+{% endif %}
+
+<form action="/analyze" method="post" enctype="multipart/form-data" class="upload-form">
+    <div class="form-group">
+        <label for="rechnung" class="file-label">
+            <span class="file-icon">📎</span>
+            <span class="file-text">Stromrechnung auswählen (PDF oder Bild)</span>
+            <input type="file" id="rechnung" name="rechnung"
+                   accept=".pdf,.jpg,.jpeg,.png" required>
+        </label>
+        <div class="file-name" id="fileName"></div>
+    </div>
+
+    <details class="extras">
+        <summary>🔌 Smart Meter Daten (optional)</summary>
+        <p class="hint">Wenn du ein Wiener-Netze-Konto hast, kann ich deine echten Verbrauchsdaten holen.</p>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="wn_email">E-Mail</label>
+                <input type="email" id="wn_email" name="wn_email"
+                       placeholder="max@example.com">
+            </div>
+            <div class="form-group">
+                <label for="wn_password">Passwort</label>
+                <input type="password" id="wn_password" name="wn_password"
+                       placeholder="••••••••">
+            </div>
+        </div>
+    </details>
+
+    <button type="submit" class="btn-primary">
+        🔍 Analysieren
+    </button>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('rechnung').addEventListener('change', function(e) {
+    const name = e.target.files[0]?.name || '';
+    document.getElementById('fileName').textContent = name;
+});
+</script>
+{% endblock %}

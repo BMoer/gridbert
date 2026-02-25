@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>⚡ Gridbert — Dein Energie-Agent</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header>
+        <div class="logo">⚡ Gridbert</div>
+        <div class="tagline">Dein persönlicher Energie-Agent</div>
+    </header>
+
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer>
+        <p>Gridbert — AGPL-3.0 | Alle Preise brutto inkl. 20% MwSt.</p>
+    </footer>
+
+    <script src="/static/htmx.min.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

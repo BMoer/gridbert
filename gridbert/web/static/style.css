@@ -1,0 +1,468 @@
+/* Gridbert — Persönlicher Energie-Agent
+   SPDX-License-Identifier: AGPL-3.0-only */
+
+/* ===== Reset & Base ===== */
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+:root {
+    --green: #22c55e;
+    --green-dark: #16a34a;
+    --green-light: #dcfce7;
+    --yellow: #facc15;
+    --bg: #f8fafc;
+    --surface: #ffffff;
+    --text: #1e293b;
+    --text-light: #64748b;
+    --border: #e2e8f0;
+    --radius: 12px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+    --shadow-lg: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ===== Header ===== */
+header {
+    background: var(--surface);
+    border-bottom: 2px solid var(--green);
+    padding: 1rem 2rem;
+    text-align: center;
+}
+
+.logo {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--green-dark);
+    letter-spacing: -0.02em;
+}
+
+.tagline {
+    font-size: 0.85rem;
+    color: var(--text-light);
+}
+
+/* ===== Main ===== */
+main {
+    flex: 1;
+    max-width: 720px;
+    width: 100%;
+    margin: 2rem auto;
+    padding: 0 1.5rem;
+}
+
+/* ===== Hero ===== */
+.hero {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.hero h1 {
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+
+.subtitle {
+    color: var(--text-light);
+    font-size: 1rem;
+}
+
+/* ===== Upload Form ===== */
+.upload-form {
+    background: var(--surface);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 2rem;
+}
+
+.form-group {
+    margin-bottom: 1.25rem;
+}
+
+.form-group label {
+    display: block;
+    font-weight: 600;
+    font-size: 0.9rem;
+    margin-bottom: 0.4rem;
+}
+
+.file-label {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1.25rem;
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+}
+
+.file-label:hover {
+    border-color: var(--green);
+    background: var(--green-light);
+}
+
+.file-icon {
+    font-size: 1.5rem;
+}
+
+.file-text {
+    font-weight: 600;
+}
+
+.file-label input[type="file"] {
+    display: none;
+}
+
+.file-name {
+    font-size: 0.85rem;
+    color: var(--green-dark);
+    margin-top: 0.5rem;
+    font-weight: 600;
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+input[type="email"],
+input[type="password"] {
+    width: 100%;
+    padding: 0.6rem 0.8rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.9rem;
+    transition: border-color 0.2s;
+}
+
+input:focus {
+    outline: none;
+    border-color: var(--green);
+    box-shadow: 0 0 0 3px var(--green-light);
+}
+
+/* ===== Extras / Details ===== */
+.extras {
+    margin-bottom: 1.5rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+}
+
+.extras summary {
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.extras[open] summary {
+    margin-bottom: 0.75rem;
+}
+
+.hint {
+    font-size: 0.85rem;
+    color: var(--text-light);
+    margin-bottom: 1rem;
+}
+
+/* ===== Buttons ===== */
+.btn-primary {
+    display: inline-block;
+    background: var(--green);
+    color: white;
+    font-weight: 700;
+    font-size: 1.05rem;
+    padding: 0.85rem 2rem;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+    text-decoration: none;
+    text-align: center;
+    width: 100%;
+}
+
+.btn-primary:hover {
+    background: var(--green-dark);
+    transform: translateY(-1px);
+}
+
+.btn-primary:active {
+    transform: translateY(0);
+}
+
+.btn-secondary {
+    display: inline-block;
+    background: var(--surface);
+    color: var(--green-dark);
+    font-weight: 600;
+    font-size: 0.95rem;
+    padding: 0.7rem 1.5rem;
+    border: 2px solid var(--green);
+    border-radius: 8px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.2s;
+}
+
+.btn-secondary:hover {
+    background: var(--green-light);
+}
+
+/* ===== Error Box ===== */
+.error-box {
+    background: #fef2f2;
+    border: 1px solid #fca5a5;
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1.5rem;
+    color: #991b1b;
+    font-weight: 600;
+}
+
+/* ===== Progress ===== */
+.progress-container {
+    background: var(--surface);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 2rem;
+    text-align: center;
+}
+
+.progress-container h2 {
+    font-size: 1.3rem;
+    margin-bottom: 1.5rem;
+}
+
+.steps {
+    text-align: left;
+    max-width: 400px;
+    margin: 0 auto 1.5rem;
+}
+
+.step {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.7rem 0;
+    border-bottom: 1px solid var(--border);
+    transition: opacity 0.3s;
+}
+
+.step:last-child {
+    border-bottom: none;
+}
+
+.step-icon {
+    font-size: 1.2rem;
+    width: 2rem;
+    text-align: center;
+}
+
+.step-name {
+    flex: 1;
+    font-weight: 500;
+}
+
+.step-status {
+    font-size: 0.85rem;
+    color: var(--text-light);
+    min-width: 6rem;
+    text-align: right;
+}
+
+/* Step States */
+.step[data-status="pending"] {
+    opacity: 0.5;
+}
+
+.step[data-status="started"] {
+    opacity: 1;
+}
+
+.step[data-status="started"] .step-status {
+    color: var(--green-dark);
+    font-weight: 600;
+}
+
+.step[data-status="done"] {
+    opacity: 1;
+}
+
+.step[data-status="error"] {
+    opacity: 1;
+}
+
+.step[data-status="skipped"] {
+    opacity: 0.6;
+}
+
+/* ===== Spinner ===== */
+.spinner-container {
+    display: flex;
+    justify-content: center;
+    padding: 1rem 0;
+}
+
+.spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--border);
+    border-top: 3px solid var(--green);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ===== Report ===== */
+.report-container {
+    background: var(--surface);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 2rem;
+}
+
+.report h1 {
+    font-size: 1.4rem;
+    color: var(--green-dark);
+    border-bottom: 2px solid var(--green);
+    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.report h2 {
+    font-size: 1.15rem;
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+    color: var(--text);
+}
+
+.report h3 {
+    font-size: 1rem;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.report p {
+    margin-bottom: 0.75rem;
+}
+
+.report ul, .report ol {
+    margin-left: 1.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.report li {
+    margin-bottom: 0.3rem;
+}
+
+.report strong {
+    color: var(--green-dark);
+}
+
+.report table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+    font-size: 0.9rem;
+}
+
+.report th {
+    background: var(--green-light);
+    color: var(--green-dark);
+    font-weight: 700;
+    text-align: left;
+    padding: 0.6rem 0.75rem;
+    border-bottom: 2px solid var(--green);
+}
+
+.report td {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.report tr:hover td {
+    background: #f0fdf4;
+}
+
+.report code {
+    background: var(--green-light);
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+
+.report a {
+    color: var(--green-dark);
+    text-decoration: underline;
+}
+
+.report-actions {
+    text-align: center;
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+}
+
+/* ===== Error Container ===== */
+.error-container {
+    background: var(--surface);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 2rem;
+    text-align: center;
+}
+
+.error-container h2 {
+    margin-bottom: 1rem;
+}
+
+.error-container p {
+    color: var(--text-light);
+    margin-bottom: 1.5rem;
+}
+
+/* ===== Footer ===== */
+footer {
+    text-align: center;
+    padding: 1.5rem;
+    font-size: 0.8rem;
+    color: var(--text-light);
+    border-top: 1px solid var(--border);
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 600px) {
+    main {
+        padding: 0 1rem;
+    }
+
+    .hero h1 {
+        font-size: 1.3rem;
+    }
+
+    .form-row {
+        grid-template-columns: 1fr;
+    }
+
+    .upload-form, .progress-container, .report-container {
+        padding: 1.25rem;
+    }
+}

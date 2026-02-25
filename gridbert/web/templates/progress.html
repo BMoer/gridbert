@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="progress-container" id="progressContainer">
+    <h2>Moment, ich schau mir deine Daten an... 🤓</h2>
+
+    <div class="steps" id="steps">
+        <div class="step" id="step-invoice" data-status="pending">
+            <span class="step-icon">🔍</span>
+            <span class="step-name">Rechnung analysieren</span>
+            <span class="step-status"></span>
+        </div>
+        <div class="step" id="step-smartmeter" data-status="pending">
+            <span class="step-icon">📡</span>
+            <span class="step-name">Smart-Meter-Daten</span>
+            <span class="step-status"></span>
+        </div>
+        <div class="step" id="step-tariff" data-status="pending">
+            <span class="step-icon">📊</span>
+            <span class="step-name">Tarife vergleichen</span>
+            <span class="step-status"></span>
+        </div>
+        <div class="step" id="step-beg" data-status="pending">
+            <span class="step-icon">🔋</span>
+            <span class="step-name">BEG-Vorteil berechnen</span>
+            <span class="step-status"></span>
+        </div>
+        <div class="step" id="step-report" data-status="pending">
+            <span class="step-icon">📝</span>
+            <span class="step-name">Report erstellen</span>
+            <span class="step-status"></span>
+        </div>
+    </div>
+
+    <div class="spinner-container" id="spinner">
+        <div class="spinner"></div>
+    </div>
+</div>
+
+<div class="report-container" id="reportContainer" style="display:none;"></div>
+
+<div class="error-container" id="errorContainer" style="display:none;">
+    <h2>❌ Das hat leider nicht geklappt</h2>
+    <p id="errorMessage"></p>
+    <a href="/" class="btn-primary">Nochmal versuchen</a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    const runId = "{{ run_id }}";
+    const evtSource = new EventSource("/stream/" + runId);
+
+    evtSource.addEventListener("progress", function(e) {
+        const data = JSON.parse(e.data);
+        const stepEl = document.getElementById("step-" + data.step);
+        if (!stepEl) return;
+
+        stepEl.dataset.status = data.status;
+        const statusEl = stepEl.querySelector(".step-status");
+
+        if (data.status === "started") {
+            statusEl.textContent = "läuft...";
+        } else if (data.status === "done") {
+            statusEl.textContent = "✅";
+        } else if (data.status === "error") {
+            statusEl.textContent = "⚠️";
+        } else if (data.status === "skipped") {
+            statusEl.textContent = "übersprungen";
+        }
+    });
+
+    evtSource.addEventListener("complete", function(e) {
+        evtSource.close();
+        const data = JSON.parse(e.data);
+
+        document.getElementById("progressContainer").style.display = "none";
+        document.getElementById("reportContainer").style.display = "block";
+        document.getElementById("reportContainer").innerHTML =
+            '<div class="report">' + data.html + '</div>' +
+            '<div class="report-actions">' +
+            '<a href="/" class="btn-secondary">Neue Analyse</a>' +
+            '</div>';
+    });
+
+    evtSource.addEventListener("error", function(e) {
+        evtSource.close();
+        let message = "Unbekannter Fehler";
+        try {
+            const data = JSON.parse(e.data);
+            message = data.message || message;
+        } catch(_) {}
+
+        document.getElementById("progressContainer").style.display = "none";
+        document.getElementById("errorContainer").style.display = "block";
+        document.getElementById("errorMessage").textContent = message;
+    });
+})();
+</script>
+{% endblock %}
