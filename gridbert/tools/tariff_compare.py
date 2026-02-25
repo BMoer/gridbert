@@ -1,11 +1,10 @@
 # Gridbert — Persönlicher Energie-Agent
 # SPDX-License-Identifier: AGPL-3.0-only
 
-"""Tarifvergleich via E-Control Tarifkalkulator."""
+"""Tarifvergleich via E-Control Tarifkalkulator (neue Portlet-API 2025+)."""
 
 from __future__ import annotations
 
-import json
 import logging
 import time
 
@@ -15,11 +14,12 @@ from gridbert.models import Tariff, TariffComparison
 
 log = logging.getLogger(__name__)
 
-# E-Control Tarifkalkulator Frontend-API
-# Reverse-engineered aus tarifkalkulator.e-control.at
-_TARIF_URL = "https://tarifkalkulator.e-control.at/tarifkalkulator/rest"
+# E-Control neue API — Liferay-Portlet auf www.e-control.at
+# Reverse-engineered aus /o/rc-public-portlet JS-Bundle
+_BASE_URL = "https://www.e-control.at/o/rc-public-rest"
+_PAGE_URL = "https://www.e-control.at/tarifkalkulator"
 
-# Timeout: Connect schnell, Read großzügig (API ist langsam)
+# Timeout & Retry
 _TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=10.0)
 _MAX_RETRIES = 3
 _RETRY_BACKOFF_BASE = 2  # Sekunden: 2, 4, 8...
@@ -64,91 +64,129 @@ def _request_with_retry(
 def _fetch_tariffs_econtrol(
     plz: str,
     jahresverbrauch_kwh: float,
-    smart_meter: bool = True,
+    aktueller_energiepreis_ct: float,
+    aktuelle_grundgebuehr_eur_monat: float,
 ) -> list[dict]:
-    """Tarife vom E-Control Tarifkalkulator holen (mit Retry)."""
-    with httpx.Client(timeout=_TIMEOUT) as client:
-        # Step 1: Netzgebiet für PLZ ermitteln
-        log.info("Ermittle Netzgebiet für PLZ %s", plz)
-        netz_response = _request_with_retry(
-            client, "GET", f"{_TARIF_URL}/netzgebiet",
-            params={"plz": plz, "sparte": "STROM"},
+    """Tarife vom E-Control Tarifkalkulator holen (neue API)."""
+    with httpx.Client(timeout=_TIMEOUT, follow_redirects=True) as client:
+        # Session-Cookie holen (Liferay braucht das)
+        client.get(_PAGE_URL)
+
+        # Step 1: Netzbetreiber + gridAreaId für PLZ ermitteln
+        log.info("Ermittle Netzbetreiber für PLZ %s", plz)
+        grid_response = _request_with_retry(
+            client, "GET",
+            f"{_BASE_URL}/rate-calculator/grid-operators",
+            params={"zipCode": plz, "energyType": "POWER"},
         )
-        netzgebiete = netz_response.json()
+        grid_data = grid_response.json()
+        operators = grid_data.get("gridOperators", [])
 
-        if not netzgebiete:
-            raise ValueError(f"Kein Netzgebiet für PLZ {plz} gefunden")
+        if not operators:
+            raise ValueError(f"Kein Netzbetreiber für PLZ {plz} gefunden")
 
-        netzgebiet_id = netzgebiete[0].get("id")
+        operator = operators[0]
+        grid_operator_id = operator["id"]
+        grid_area_id = operator["gridAreaId"]
+        log.info(
+            "Netzbetreiber: %s (ID=%s, GridArea=%s)",
+            operator.get("name"), grid_operator_id, grid_area_id,
+        )
 
         # Step 2: Tarife abfragen
         log.info(
-            "Frage Tarife ab: PLZ=%s, Verbrauch=%d kWh, Netzgebiet=%s",
-            plz,
-            jahresverbrauch_kwh,
-            netzgebiet_id,
+            "Frage Tarife ab: PLZ=%s, Verbrauch=%d kWh",
+            plz, jahresverbrauch_kwh,
         )
         payload = {
-            "plz": plz,
-            "verbrauch": jahresverbrauch_kwh,
-            "sparte": "STROM",
-            "netzgebietId": netzgebiet_id,
-            "smartMeter": smart_meter,
-            "kategorie": "HAUSHALT",
+            "customerGroup": "HOME",
+            "energyType": "POWER",
+            "zipCode": plz,
+            "gridOperatorId": grid_operator_id,
+            "gridAreaId": grid_area_id,
+            "moveHome": False,
+            "includeSwitchingDiscounts": True,
+            "firstMeterOptions": {
+                "standardConsumption": int(jahresverbrauch_kwh),
+                "smartMeterRequestOptions": {"smartMeterSearch": False},
+            },
+            "comparisonOptions": {
+                "manualEntry": True,
+                "mainBaseRate": aktuelle_grundgebuehr_eur_monat,
+                "mainEnergyRate": aktueller_energiepreis_ct,
+            },
+            "priceView": "EUR_PER_YEAR",
+            "referencePeriod": "ONE_YEAR",
+            "searchPriceModel": "CLASSIC",
         }
         tarif_response = _request_with_retry(
-            client, "POST", f"{_TARIF_URL}/ergebnis",
+            client, "POST",
+            f"{_BASE_URL}/rate-calculator/energy-type/POWER/rate",
             json=payload,
+            params={"isSmartMeter": False},
         )
-        return tarif_response.json()
+        data = tarif_response.json()
+        return data.get("ratedProducts", [])
 
 
 def _parse_tariff(raw: dict, jahresverbrauch_kwh: float) -> Tariff | None:
-    """Einen einzelnen Tarif aus der E-Control Antwort parsen."""
+    """Einen einzelnen Tarif aus der neuen E-Control API parsen.
+
+    Die API liefert Netto-Cent-Werte. Gridbert arbeitet durchgehend mit
+    Brutto-Preisen (inkl. 20 % MwSt), deshalb × 1.2.  Jahreskosten werden
+    nur aus Energie + Grundgebühr berechnet (ohne Netzkosten), damit der
+    Vergleich mit dem aktuellen Tarif konsistent ist.
+    """
     try:
-        lieferant = raw.get("lieferant", {}).get("name", "Unbekannt")
-        tarif_name = raw.get("tarifName", raw.get("name", ""))
+        # Spotmarkt-/Dynamik-Tarife haben keinen festen Energiepreis → überspringen
+        if raw.get("rateZoningType") == "COMPLEX":
+            return None
 
-        # Gesamtkosten pro Jahr (E-Control berechnet das bereits)
-        jahreskosten = raw.get("gesamtkosten", 0.0)
+        lieferant = raw.get("brandName", raw.get("supplierName", "Unbekannt"))
+        tarif_name = raw.get("productName", "")
 
-        # Energiepreis und Grundgebühr extrahieren
-        energiepreis = 0.0
-        grundgebuehr_monat = 0.0
+        energy_costs = raw.get("calculatedProductEnergyCosts", {})
 
-        for komponente in raw.get("tarifKomponenten", []):
-            typ = komponente.get("typ", "")
-            if typ == "ENERGIEPREIS" or "energiepreis" in typ.lower():
-                # ct/kWh
-                energiepreis = komponente.get("preisBrutto", 0.0)
-            elif typ == "GRUNDPAUSCHALE" or "grundp" in typ.lower() or "pauschale" in typ.lower():
-                # €/Monat oder €/Jahr
-                preis = komponente.get("preisBrutto", 0.0)
-                einheit = komponente.get("einheit", "").lower()
-                if "jahr" in einheit:
-                    grundgebuehr_monat = preis / 12
-                else:
-                    grundgebuehr_monat = preis
+        # energyRateTotal = Netto-Energiekosten in Cent (Verbrauch × Netto-ct/kWh)
+        energy_netto_cent = energy_costs.get("energyRateTotal", 0.0)
+        # baseRate = Netto-Grundgebühr in Cent/Jahr
+        base_netto_cent_year = energy_costs.get("baseRate", 0.0)
 
-        # Fallback: Berechne aus Jahreskosten wenn nötig
-        if jahreskosten == 0 and energiepreis > 0:
-            jahreskosten = (
-                jahresverbrauch_kwh * energiepreis / 100 + grundgebuehr_monat * 12
-            )
+        # → Brutto-Energiepreis ct/kWh
+        if jahresverbrauch_kwh > 0 and energy_netto_cent > 0:
+            energiepreis = energy_netto_cent / jahresverbrauch_kwh * 1.2
+        else:
+            energiepreis = 0.0
 
-        oekostrom = raw.get("oekostrom", False) or raw.get("isOekostrom", False)
+        # → Brutto-Grundgebühr EUR/Monat
+        grundgebuehr_monat = base_netto_cent_year / 100.0 / 12.0 * 1.2
+
+        # Jahreskosten (nur Energie, ohne Netz — wie beim aktuellen Tarif)
+        jahreskosten = (
+            jahresverbrauch_kwh * energiepreis / 100.0
+            + grundgebuehr_monat * 12.0
+        )
+
+        # Ökostrom
+        oekostrom = any(
+            prop.get("propName") == "CERTIFIED_GREEN_POWER"
+            for prop in raw.get("productProperties", [])
+        )
+
+        if jahreskosten <= 0:
+            return None
 
         return Tariff(
             lieferant=lieferant,
             tarif_name=tarif_name,
-            energiepreis_ct_kwh=energiepreis,
-            grundgebuehr_eur_monat=grundgebuehr_monat,
-            jahreskosten_eur=jahreskosten,
+            energiepreis_ct_kwh=round(energiepreis, 2),
+            grundgebuehr_eur_monat=round(grundgebuehr_monat, 2),
+            jahreskosten_eur=round(jahreskosten, 2),
             ist_oekostrom=oekostrom,
             quelle="e-control",
         )
-    except (KeyError, TypeError) as e:
-        log.warning("Tarif konnte nicht geparst werden: %s — %s", e, raw)
+    except (KeyError, TypeError, ZeroDivisionError) as e:
+        log.warning("Tarif konnte nicht geparst werden: %s — %s", e, raw.get("productName", "?"))
         return None
 
 
@@ -177,7 +215,10 @@ def compare_tariffs(
     )
 
     try:
-        raw_tarife = _fetch_tariffs_econtrol(plz, jahresverbrauch_kwh)
+        raw_tarife = _fetch_tariffs_econtrol(
+            plz, jahresverbrauch_kwh,
+            aktueller_energiepreis, aktuelle_grundgebuehr,
+        )
     except Exception as e:
         log.error("E-Control Abfrage fehlgeschlagen: %s", e)
         return TariffComparison(
