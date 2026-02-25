@@ -35,13 +35,13 @@ def start_pipeline_run(
         try:
             from gridbert.main import run_pipeline
 
-            report = run_pipeline(
+            report, analysis_id = run_pipeline(
                 rechnung_path=rechnung_path,
                 wn_email=wn_email,
                 wn_password=wn_password,
                 on_progress=on_progress,
             )
-            q.put({"step": "complete", "status": "done", "report": report})
+            q.put({"step": "complete", "status": "done", "report": report, "analysis_id": analysis_id})
         except Exception as e:
             log.exception("Pipeline fehlgeschlagen")
             q.put({"step": "complete", "status": "error", "message": str(e)})

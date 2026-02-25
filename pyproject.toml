@@ -3,7 +3,7 @@
 
 [project]
 name = "gridbert"
-version = "0.1.0"
+version = "0.2.0"
 description = "Persönlicher Energie-Agent — Zeig mir was ich spare"
 license = "AGPL-3.0-only"
 requires-python = ">=3.11"
@@ -16,6 +16,7 @@ dependencies = [
     "Pillow>=10.0",
     "flask>=3.0",
     "markdown>=3.5",
+    "fpdf2>=2.7",
 ]
 
 [project.scripts]

@@ -61,12 +61,28 @@ def _request_with_retry(
     raise last_exc  # type: ignore[misc]
 
 
+class _EControlResult:
+    """Ergebnis der E-Control Abfrage inkl. Metadaten."""
+
+    __slots__ = ("tarife", "netzbetreiber", "netzkosten_eur_jahr")
+
+    def __init__(
+        self,
+        tarife: list[dict],
+        netzbetreiber: str,
+        netzkosten_eur_jahr: float,
+    ) -> None:
+        self.tarife = tarife
+        self.netzbetreiber = netzbetreiber
+        self.netzkosten_eur_jahr = netzkosten_eur_jahr
+
+
 def _fetch_tariffs_econtrol(
     plz: str,
     jahresverbrauch_kwh: float,
     aktueller_energiepreis_ct: float,
     aktuelle_grundgebuehr_eur_monat: float,
-) -> list[dict]:
+) -> _EControlResult:
     """Tarife vom E-Control Tarifkalkulator holen (neue API)."""
     with httpx.Client(timeout=_TIMEOUT, follow_redirects=True) as client:
         # Session-Cookie holen (Liferay braucht das)
@@ -88,9 +104,10 @@ def _fetch_tariffs_econtrol(
         operator = operators[0]
         grid_operator_id = operator["id"]
         grid_area_id = operator["gridAreaId"]
+        netzbetreiber_name = operator.get("name", "Unbekannt")
         log.info(
             "Netzbetreiber: %s (ID=%s, GridArea=%s)",
-            operator.get("name"), grid_operator_id, grid_area_id,
+            netzbetreiber_name, grid_operator_id, grid_area_id,
         )
 
         # Step 2: Tarife abfragen
@@ -126,7 +143,19 @@ def _fetch_tariffs_econtrol(
             params={"isSmartMeter": False},
         )
         data = tarif_response.json()
-        return data.get("ratedProducts", [])
+        raw_tarife = data.get("ratedProducts", [])
+
+        # Netzkosten aus erstem Tarif extrahieren (für alle Anbieter gleich)
+        netzkosten = 0.0
+        if raw_tarife:
+            grid_costs = raw_tarife[0].get("calculatedGridCosts", {})
+            netzkosten = grid_costs.get("totalGrossSum", 0.0) / 100.0
+
+        return _EControlResult(
+            tarife=raw_tarife,
+            netzbetreiber=netzbetreiber_name,
+            netzkosten_eur_jahr=round(netzkosten, 2),
+        )
 
 
 def _parse_tariff(raw: dict, jahresverbrauch_kwh: float) -> Tariff | None:
@@ -215,7 +244,7 @@ def compare_tariffs(
     )
 
     try:
-        raw_tarife = _fetch_tariffs_econtrol(
+        result = _fetch_tariffs_econtrol(
             plz, jahresverbrauch_kwh,
             aktueller_energiepreis, aktuelle_grundgebuehr,
         )
@@ -228,7 +257,7 @@ def compare_tariffs(
         )
 
     alternativen: list[Tariff] = []
-    for raw in raw_tarife:
+    for raw in result.tarife:
         tarif = _parse_tariff(raw, jahresverbrauch_kwh)
         if tarif and tarif.jahreskosten_eur > 0:
             alternativen.append(tarif)
@@ -242,4 +271,6 @@ def compare_tariffs(
         alternativen=alternativen,
         plz=plz,
         jahresverbrauch_kwh=jahresverbrauch_kwh,
+        netzkosten_eur_jahr=result.netzkosten_eur_jahr,
+        netzbetreiber=result.netzbetreiber,
     )

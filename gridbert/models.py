@@ -90,6 +90,8 @@ class TariffComparison(BaseModel):
     alternativen: list[Tariff] = Field(default_factory=list)
     plz: str = ""
     jahresverbrauch_kwh: float = 0.0
+    netzkosten_eur_jahr: float = Field(default=0.0, description="Behördlich festgelegte Netzkosten €/Jahr brutto")
+    netzbetreiber: str = Field(default="", description="Name des Netzbetreibers")
 
     @property
     def bester_tarif(self) -> Tariff | None:
@@ -108,11 +110,14 @@ class TariffComparison(BaseModel):
 # --- BEG --------------------------------------------------------------------
 
 class BEGCalculation(BaseModel):
-    """Berechnung des 7Energy BEG-Vorteils."""
+    """Berechnung des Vorteils einer Bürgerenergiegemeinschaft."""
 
+    beg_name: str = Field(default="", description="Name der BEG")
+    beg_url: str = Field(default="", description="Website der BEG")
     beg_preis_ct_kwh: float = Field(default=15.15, description="BEG Energiepreis inkl. MwSt")
     versorgungsanteil: float = Field(default=0.5, description="Anteil BEG-Strom (0-1)")
     einmalkosten_eur: float = Field(default=100.0, description="Verrechnungskonto")
+    notiz: str = Field(default="", description="Hinweise zum Anbieter")
     jahresverbrauch_kwh: float = 0.0
     aktueller_preis_ct_kwh: float = 0.0
 
@@ -147,6 +152,24 @@ class BEGCalculation(BaseModel):
         return self.einmalkosten_eur / (self.ersparnis_jahr_eur / 12)
 
 
+class BEGComparison(BaseModel):
+    """Vergleich mehrerer BEG-Anbieter."""
+
+    optionen: list[BEGCalculation] = Field(default_factory=list)
+
+    @property
+    def beste_beg(self) -> BEGCalculation | None:
+        profitable = [b for b in self.optionen if b.ersparnis_jahr_eur > 0]
+        if not profitable:
+            return None
+        return max(profitable, key=lambda b: b.ersparnis_jahr_eur)
+
+    @property
+    def max_ersparnis_eur(self) -> float:
+        best = self.beste_beg
+        return best.ersparnis_jahr_eur if best else 0.0
+
+
 # --- Report -----------------------------------------------------------------
 
 class ReportSection(str, Enum):
@@ -163,6 +186,8 @@ class SavingsReport(BaseModel):
     invoice: Invoice
     smart_meter: SmartMeterData | None = None
     tariff_comparison: TariffComparison | None = None
+    beg_comparison: BEGComparison | None = None
+    # Rückwärtskompatibilität: einzelne BEGCalculation → beste aus Vergleich
     beg_calculation: BEGCalculation | None = None
 
     @property
@@ -179,10 +204,18 @@ class SavingsReport(BaseModel):
         return energie + grund
 
     @property
+    def _beste_beg(self) -> BEGCalculation | None:
+        """Beste BEG aus Vergleich oder Fallback auf Einzelberechnung."""
+        if self.beg_comparison:
+            return self.beg_comparison.beste_beg
+        return self.beg_calculation
+
+    @property
     def gesamtersparnis_eur(self) -> float:
         ersparnis = 0.0
         if self.tariff_comparison:
             ersparnis += self.tariff_comparison.max_ersparnis_eur
-        if self.beg_calculation:
-            ersparnis += self.beg_calculation.ersparnis_jahr_eur
+        best_beg = self._beste_beg
+        if best_beg:
+            ersparnis += best_beg.ersparnis_jahr_eur
         return ersparnis

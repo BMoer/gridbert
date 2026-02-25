@@ -22,7 +22,7 @@ from gridbert.config import (
 )
 from gridbert.models import SavingsReport
 from gridbert.report import generate_report
-from gridbert.tools.beg_advisor import calculate_beg_advantage
+from gridbert.tools.beg_advisor import compare_beg_options
 from gridbert.tools.invoice_parser import parse_invoice
 from gridbert.tools.smartmeter import fetch_smart_meter_data
 from gridbert.tools.tariff_compare import compare_tariffs
@@ -83,8 +83,11 @@ def run_pipeline(
     wn_email: str = "",
     wn_password: str = "",
     on_progress: ProgressCallback = None,
-) -> str:
-    """Deterministische Pipeline: Rechnung → Smart Meter → Tarife → BEG → Report."""
+) -> tuple[str, int | None]:
+    """Deterministische Pipeline: Rechnung → Smart Meter → Tarife → BEG → Report.
+
+    Returns (report_markdown, analysis_id).
+    """
 
     # --- Step 1: Rechnung analysieren ----------------------------------------
     _progress(on_progress, "invoice", "started", "🔍 Analysiere Rechnung...")
@@ -152,38 +155,52 @@ def run_pipeline(
         _progress(on_progress, "tariff", "error",
                   f"   ⚠️  Tarifvergleich fehlgeschlagen: {e}")
 
-    # --- Step 4: BEG-Vorteil -------------------------------------------------
+    # --- Step 4: BEG-Vergleich ------------------------------------------------
     _progress(on_progress, "beg", "started",
-              "🔋 Berechne 7Energy BEG-Vorteil...")
-    beg = None
+              "🔋 Vergleiche Energiegemeinschaften...")
+    beg_comparison = None
     try:
-        beg = calculate_beg_advantage(
+        beg_comparison = compare_beg_options(
             jahresverbrauch_kwh=jahresverbrauch,
             aktueller_energiepreis_ct_kwh=invoice.energiepreis_ct_kwh,
         )
-        if beg.ersparnis_jahr_eur > 0:
+        if beg_comparison.beste_beg:
+            best = beg_comparison.beste_beg
+            n_profitable = sum(1 for b in beg_comparison.optionen if b.ersparnis_jahr_eur > 0)
             _progress(on_progress, "beg", "done",
-                      f"   ✅ {beg.ersparnis_jahr_eur:,.2f} €/Jahr Ersparnis, "
-                      f"Amortisation in {beg.amortisation_monate:.1f} Monaten")
+                      f"   ✅ {n_profitable} von {len(beg_comparison.optionen)} BEGs sparen — "
+                      f"Beste: {best.beg_name} ({best.ersparnis_jahr_eur:,.2f} €/Jahr)")
         else:
             _progress(on_progress, "beg", "done",
-                      "   ℹ️  BEG bringt bei deinem Tarif keinen Vorteil")
+                      "   ℹ️  Keine BEG bringt bei deinem Tarif einen Vorteil")
     except Exception as e:
         _progress(on_progress, "beg", "error",
-                  f"   ⚠️  BEG-Berechnung fehlgeschlagen: {e}")
+                  f"   ⚠️  BEG-Vergleich fehlgeschlagen: {e}")
 
-    # --- Step 5: Report generieren -------------------------------------------
+    # --- Step 5: Report generieren + speichern --------------------------------
     _progress(on_progress, "report", "started",
               "📝 Erstelle Einsparungs-Report...")
     report_data = SavingsReport(
         invoice=invoice,
         smart_meter=smart_meter,
         tariff_comparison=tariff_comparison,
-        beg_calculation=beg,
+        beg_comparison=beg_comparison,
     )
     report = generate_report(report_data)
+
+    # Analyse in SQLite speichern
+    analysis_id: int | None = None
+    try:
+        from gridbert.storage import GridbertStorage
+        storage = GridbertStorage()
+        analysis_id = storage.save_analysis(report_data, report)
+        storage.close()
+        log.info("Analyse #%d gespeichert", analysis_id)
+    except Exception as e:
+        log.warning("Analyse konnte nicht gespeichert werden: %s", e)
+
     _progress(on_progress, "report", "done", "   ✅ Report fertig!")
-    return report
+    return report, analysis_id
 
 
 def main() -> None:
@@ -255,7 +272,7 @@ def main() -> None:
 
     print("\n⚡ Gridbert startet... Moment, ich schau mir deine Daten an.\n")
 
-    report = run_pipeline(
+    report, _analysis_id = run_pipeline(
         rechnung_path=rechnung_path,
         wn_email=args.wn_email,
         wn_password=args.wn_password,

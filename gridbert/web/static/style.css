@@ -41,11 +41,36 @@ header {
     text-align: center;
 }
 
+.header-row {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 2rem;
+}
+
+.header-row nav {
+    display: flex;
+    gap: 1rem;
+}
+
+.header-row nav a {
+    color: var(--text-light);
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: color 0.2s;
+}
+
+.header-row nav a:hover {
+    color: var(--green-dark);
+}
+
 .logo {
     font-size: 1.5rem;
     font-weight: 800;
     color: var(--green-dark);
     letter-spacing: -0.02em;
+    text-decoration: none;
 }
 
 .tagline {
@@ -446,6 +471,187 @@ footer {
     font-size: 0.8rem;
     color: var(--text-light);
     border-top: 1px solid var(--border);
+}
+
+/* ===== History ===== */
+.history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.history-card {
+    display: block;
+    background: var(--surface);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 1rem 1.25rem;
+    text-decoration: none;
+    color: var(--text);
+    transition: box-shadow 0.2s, transform 0.1s;
+}
+
+.history-card:hover {
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-1px);
+}
+
+.history-meta {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.4rem;
+}
+
+.history-date {
+    font-size: 0.8rem;
+    color: var(--text-light);
+}
+
+.history-supplier {
+    font-weight: 600;
+}
+
+.history-details {
+    display: flex;
+    gap: 1.5rem;
+    font-size: 0.85rem;
+    color: var(--text-light);
+}
+
+.history-savings {
+    color: var(--green-dark);
+    font-weight: 700;
+}
+
+.empty-state {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 3rem;
+    text-align: center;
+    color: var(--text-light);
+}
+
+.empty-state a {
+    color: var(--green-dark);
+    font-weight: 600;
+}
+
+.report-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+}
+
+.report-actions-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    justify-content: center;
+    margin-top: 1.5rem;
+    padding: 1rem;
+    background: var(--surface);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+}
+
+.report-actions-bar a {
+    font-size: 0.9rem;
+}
+
+/* ===== Chat ===== */
+.chat-container {
+    background: var(--surface);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    margin-top: 1.5rem;
+    overflow: hidden;
+}
+
+.chat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1.25rem;
+    background: var(--green-light);
+    cursor: pointer;
+    user-select: none;
+}
+
+.chat-header h3 {
+    font-size: 1rem;
+    color: var(--green-dark);
+}
+
+.chat-body {
+    display: none;
+    padding: 1rem 1.25rem;
+}
+
+.chat-body.open {
+    display: block;
+}
+
+.chat-messages {
+    max-height: 400px;
+    overflow-y: auto;
+    margin-bottom: 1rem;
+}
+
+.chat-msg {
+    margin-bottom: 0.75rem;
+    padding: 0.6rem 0.8rem;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.chat-msg.user {
+    background: var(--green-light);
+    margin-left: 2rem;
+}
+
+.chat-msg.assistant {
+    background: var(--bg);
+    margin-right: 2rem;
+}
+
+.chat-input-row {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.chat-input-row input {
+    flex: 1;
+    padding: 0.6rem 0.8rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.9rem;
+}
+
+.chat-input-row input:focus {
+    outline: none;
+    border-color: var(--green);
+    box-shadow: 0 0 0 3px var(--green-light);
+}
+
+.chat-input-row button {
+    padding: 0.6rem 1.2rem;
+    background: var(--green);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.chat-input-row button:hover {
+    background: var(--green-dark);
+}
+
+.chat-input-row button:disabled {
+    background: var(--border);
+    cursor: not-allowed;
 }
 
 /* ===== Responsive ===== */

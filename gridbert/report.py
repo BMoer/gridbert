@@ -27,6 +27,13 @@ def generate_report(report: SavingsReport) -> str:
     lines.append(f"- **Grundgebühr:** {inv.grundgebuehr_eur_monat:.2f} €/Monat")
     lines.append(f"- **Jahresverbrauch:** {report.jahresverbrauch_kwh:,.0f} kWh")
     lines.append(f"- **Aktuelle Jahreskosten (Energie + Grundgebühr):** {report.aktuelle_jahreskosten_eur:,.2f} €")
+
+    # Netzkosten (behördlich festgelegt, aus E-Control)
+    if report.tariff_comparison and report.tariff_comparison.netzkosten_eur_jahr > 0:
+        tc = report.tariff_comparison
+        gesamt_inkl_netz = report.aktuelle_jahreskosten_eur + tc.netzkosten_eur_jahr
+        lines.append(f"- **Netzkosten:** {tc.netzkosten_eur_jahr:,.2f} €/Jahr ({tc.netzbetreiber}, behördlich festgelegt)")
+        lines.append(f"- **Gesamtkosten inkl. Netz:** {gesamt_inkl_netz:,.2f} €/Jahr")
     lines.append("")
 
     # Smart Meter Details
@@ -77,20 +84,52 @@ def generate_report(report: SavingsReport) -> str:
             lines.append("E-Control Tarifvergleich war leider nicht verfügbar. Versuch's nochmal oder check tarifkalkulator.e-control.at manuell.")
             lines.append("")
 
-    # --- BEG Vorteil ---
-    if report.beg_calculation:
-        beg = report.beg_calculation
-        lines.append("## 7Energy Bürgerenergiegemeinschaft")
+    # --- BEG-Vergleich ---
+    if report.beg_comparison and report.beg_comparison.optionen:
+        bc = report.beg_comparison
+        lines.append("## Energiegemeinschaften (BEG)")
         lines.append("")
-        lines.append(f"BEG-Strompreis: **{beg.beg_preis_ct_kwh:.2f} ct/kWh** (dein aktueller: {beg.aktueller_preis_ct_kwh:.2f} ct/kWh)")
-        lines.append(f"Geschätzter Versorgungsanteil: **{beg.versorgungsanteil * 100:.0f}%** deines Verbrauchs")
+        lines.append(f"Dein aktueller Energiepreis: **{report.invoice.energiepreis_ct_kwh:.2f} ct/kWh**")
         lines.append("")
 
-        if beg.ersparnis_jahr_eur > 0:
-            lines.append(f"**Ersparnis: {beg.ersparnis_jahr_eur:,.2f} €/Jahr** nur durch den BEG-Anteil.")
-            lines.append(f"Einmalkosten: {beg.einmalkosten_eur:.0f} € (Verrechnungskonto) — amortisiert sich in **{beg.amortisation_monate:.1f} Monaten**.")
+        profitable = [b for b in bc.optionen if b.ersparnis_jahr_eur > 0]
+
+        if profitable:
+            lines.append("| # | Anbieter | ct/kWh | Anteil | Ersparnis/Jahr | Einmalkosten |")
+            lines.append("|---|----------|--------|--------|----------------|--------------|")
+
+            for i, b in enumerate(bc.optionen, 1):
+                ersparnis_str = f"**{b.ersparnis_jahr_eur:+,.2f} €**" if b.ersparnis_jahr_eur > 0 else f"{b.ersparnis_jahr_eur:,.2f} €"
+                einmal_str = f"{b.einmalkosten_eur:.0f} €" if b.einmalkosten_eur > 0 else "—"
+                lines.append(
+                    f"| {i} | [{b.beg_name}]({b.beg_url}) | {b.beg_preis_ct_kwh:.2f} | "
+                    f"{b.versorgungsanteil * 100:.0f}% | {ersparnis_str} | {einmal_str} |"
+                )
+
+            lines.append("")
+
+            best = bc.beste_beg
+            if best:
+                lines.append(
+                    f"Beste Option: **{best.beg_name}** spart dir **{best.ersparnis_jahr_eur:,.2f} €/Jahr** "
+                    f"bei {best.versorgungsanteil * 100:.0f}% Versorgungsanteil."
+                )
+                if best.einmalkosten_eur > 0:
+                    lines.append(
+                        f"Einmalkosten: {best.einmalkosten_eur:.0f} € — amortisiert sich in "
+                        f"**{best.amortisation_monate:.1f} Monaten**."
+                    )
         else:
-            lines.append("Bei deinem aktuellen Energiepreis bringt die BEG keinen Vorteil. Das passiert, wenn dein Tarif schon sehr günstig ist.")
+            lines.append("Keine BEG ist bei deinem aktuellen Energiepreis günstiger. Das passiert, wenn dein Tarif schon sehr günstig ist.")
+        lines.append("")
+    elif report.beg_calculation:
+        # Legacy: einzelne BEGCalculation
+        beg = report.beg_calculation
+        lines.append("## Energiegemeinschaft (BEG)")
+        lines.append("")
+        lines.append(f"BEG-Strompreis: **{beg.beg_preis_ct_kwh:.2f} ct/kWh** (dein aktueller: {beg.aktueller_preis_ct_kwh:.2f} ct/kWh)")
+        if beg.ersparnis_jahr_eur > 0:
+            lines.append(f"**Ersparnis: {beg.ersparnis_jahr_eur:,.2f} €/Jahr**")
         lines.append("")
 
     # --- Gesamtersparnis ---
@@ -119,8 +158,9 @@ def generate_report(report: SavingsReport) -> str:
                          f"Geht online in 5 Minuten. Dein alter Vertrag wird automatisch gekündigt.")
             step += 1
 
-    if report.beg_calculation and report.beg_calculation.ersparnis_jahr_eur > 0:
-        lines.append(f"{step}. **7Energy BEG beitreten** — Online auf 7energy.at anmelden, "
+    best_beg = report._beste_beg
+    if best_beg and best_beg.ersparnis_jahr_eur > 0:
+        lines.append(f"{step}. **{best_beg.beg_name} beitreten** — Online auf {best_beg.beg_url} anmelden, "
                      f"dann Datenfreigabe beim Netzbetreiber aktivieren.")
         step += 1
 

@@ -39,6 +39,32 @@
 
 <div class="report-container" id="reportContainer" style="display:none;"></div>
 
+<!-- Download-Buttons (nach Report-Anzeige) -->
+<div class="report-actions-bar" id="downloadBar" style="display:none;">
+    <a id="dlSwitching" class="btn-secondary" href="#">📄 Wechsel-Vollmacht (PDF)</a>
+    <a id="dlBeg" class="btn-secondary" href="#">📄 BEG-Beitritt (PDF)</a>
+    <a href="/" class="btn-secondary">Neue Analyse</a>
+</div>
+
+<!-- Chat-Widget (nach Report-Anzeige) -->
+<div class="chat-container" id="chatContainer" style="display:none;">
+    <div class="chat-header" id="chatToggle">
+        <h3>💬 Fragen zum Report?</h3>
+        <span class="chat-toggle-icon">▼</span>
+    </div>
+    <div class="chat-body open" id="chatBody">
+        <div class="chat-messages" id="chatMessages">
+            <div class="chat-msg assistant">
+                Hey! Ich bin Gridbert. Du hast Fragen zu deinem Einsparungs-Report? Frag mich einfach — zu Tarifen, Energiegemeinschaften, Netzkosten oder dem Wechselprozess.
+            </div>
+        </div>
+        <div class="chat-input-row">
+            <input type="text" id="chatInput" placeholder="z.B. Was sind Netzkosten?" autocomplete="off">
+            <button id="chatSend" type="button">Senden</button>
+        </div>
+    </div>
+</div>
+
 <div class="error-container" id="errorContainer" style="display:none;">
     <h2>❌ Das hat leider nicht geklappt</h2>
     <p id="errorMessage"></p>
@@ -50,6 +76,10 @@
 <script>
 (function() {
     const runId = "{{ run_id }}";
+    let analysisId = null;
+    const chatHistory = [];
+
+    // ===== Pipeline SSE =====
     const evtSource = new EventSource("/stream/" + runId);
 
     evtSource.addEventListener("progress", function(e) {
@@ -75,13 +105,22 @@
         evtSource.close();
         const data = JSON.parse(e.data);
 
+        analysisId = data.analysis_id;
+
         document.getElementById("progressContainer").style.display = "none";
         document.getElementById("reportContainer").style.display = "block";
         document.getElementById("reportContainer").innerHTML =
-            '<div class="report">' + data.html + '</div>' +
-            '<div class="report-actions">' +
-            '<a href="/" class="btn-secondary">Neue Analyse</a>' +
-            '</div>';
+            '<div class="report">' + data.html + '</div>';
+
+        // Download-Buttons konfigurieren und einblenden
+        if (analysisId) {
+            document.getElementById("dlSwitching").href = "/download/switching/" + analysisId;
+            document.getElementById("dlBeg").href = "/download/beg/" + analysisId;
+            document.getElementById("downloadBar").style.display = "flex";
+
+            // Chat aktivieren
+            document.getElementById("chatContainer").style.display = "block";
+        }
     });
 
     evtSource.addEventListener("error", function(e) {
@@ -95,6 +134,108 @@
         document.getElementById("progressContainer").style.display = "none";
         document.getElementById("errorContainer").style.display = "block";
         document.getElementById("errorMessage").textContent = message;
+    });
+
+    // ===== Chat =====
+    const chatToggle = document.getElementById("chatToggle");
+    const chatBody = document.getElementById("chatBody");
+    const chatInput = document.getElementById("chatInput");
+    const chatSend = document.getElementById("chatSend");
+    const chatMessages = document.getElementById("chatMessages");
+
+    chatToggle.addEventListener("click", function() {
+        chatBody.classList.toggle("open");
+        const icon = chatToggle.querySelector(".chat-toggle-icon");
+        icon.textContent = chatBody.classList.contains("open") ? "▲" : "▼";
+    });
+
+    function addMessage(role, text) {
+        const div = document.createElement("div");
+        div.className = "chat-msg " + role;
+        div.textContent = text;
+        chatMessages.appendChild(div);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+        return div;
+    }
+
+    function sendMessage() {
+        const msg = chatInput.value.trim();
+        if (!msg || !analysisId) return;
+
+        chatInput.value = "";
+        chatInput.disabled = true;
+        chatSend.disabled = true;
+
+        // User-Nachricht anzeigen
+        addMessage("user", msg);
+        chatHistory.push({role: "user", content: msg});
+
+        // Platzhalter für Antwort
+        const answerDiv = addMessage("assistant", "");
+        let fullText = "";
+
+        // SSE-Request für Chat-Antwort
+        fetch("/chat/" + analysisId, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+                message: msg,
+                history: chatHistory.slice(-10)
+            })
+        }).then(function(response) {
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = "";
+
+            function read() {
+                reader.read().then(function(result) {
+                    if (result.done) {
+                        // Stream fertig
+                        chatHistory.push({role: "assistant", content: fullText});
+                        chatInput.disabled = false;
+                        chatSend.disabled = false;
+                        chatInput.focus();
+                        return;
+                    }
+
+                    buffer += decoder.decode(result.value, {stream: true});
+                    const lines = buffer.split("\n");
+                    buffer = lines.pop(); // Letztes (evtl. unvollständiges) Stück behalten
+
+                    for (const line of lines) {
+                        if (line.startsWith("data: ")) {
+                            const payload = line.slice(6);
+                            if (payload === "[DONE]") {
+                                chatHistory.push({role: "assistant", content: fullText});
+                                chatInput.disabled = false;
+                                chatSend.disabled = false;
+                                chatInput.focus();
+                                return;
+                            }
+                            try {
+                                const token = JSON.parse(payload);
+                                fullText += token;
+                                answerDiv.textContent = fullText;
+                                chatMessages.scrollTop = chatMessages.scrollHeight;
+                            } catch(e) {}
+                        }
+                    }
+
+                    read();
+                });
+            }
+
+            read();
+        }).catch(function(err) {
+            answerDiv.textContent = "Fehler: " + err.message;
+            chatInput.disabled = false;
+            chatSend.disabled = false;
+        });
+    }
+
+    chatSend.addEventListener("click", sendMessage);
+    chatInput.addEventListener("keydown", function(e) {
+        if (e.key === "Enter") sendMessage();
     });
 })();
 </script>

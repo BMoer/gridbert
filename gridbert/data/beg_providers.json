@@ -1,0 +1,29 @@
+[
+  {
+    "name": "7Energy",
+    "preis_ct_kwh": 15.15,
+    "einmalkosten_eur": 100.0,
+    "versorgungsanteil": 0.50,
+    "typ": "BEG",
+    "url": "https://www.7energy.at",
+    "notiz": "Österreichweit, Vereinsbeitritt, Verrechnungskonto 100 €"
+  },
+  {
+    "name": "BEG Tirol",
+    "preis_ct_kwh": 8.10,
+    "einmalkosten_eur": 0.0,
+    "versorgungsanteil": 0.30,
+    "typ": "BEG",
+    "url": "https://beg-tirol.at",
+    "notiz": "Österreichweit, aktuell günstigster bekannter BEG-Preis (Stand 2026)"
+  },
+  {
+    "name": "OurPower",
+    "preis_ct_kwh": 12.00,
+    "einmalkosten_eur": 0.0,
+    "versorgungsanteil": 0.40,
+    "typ": "BEG",
+    "url": "https://strom.ourpower.coop",
+    "notiz": "Marktplatz-Modell, Preis variiert je nach Erzeuger"
+  }
+]

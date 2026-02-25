@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="hero">
+    <h1>📋 Deine Analysen</h1>
+    <p class="subtitle">Alle bisherigen Gridbert-Auswertungen.</p>
+</div>
+
+{% if analyses %}
+<div class="history-list">
+    {% for a in analyses %}
+    <a href="/history/{{ a.id }}" class="history-card">
+        <div class="history-meta">
+            <span class="history-date">{{ a.timestamp[:10] }}</span>
+            <span class="history-supplier">{{ a.rechnung_lieferant or '—' }}</span>
+        </div>
+        <div class="history-details">
+            <span>{{ a.energiepreis_ct_kwh or 0 | round(1) }} ct/kWh</span>
+            <span>{{ a.jahresverbrauch_kwh or 0 | round(0) | int }} kWh</span>
+            {% if a.max_ersparnis_eur and a.max_ersparnis_eur > 0 %}
+            <span class="history-savings">{{ a.max_ersparnis_eur | round(0) | int }} € Ersparnis</span>
+            {% endif %}
+        </div>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+    <p>Noch keine Analysen. <a href="/">Starte deine erste Analyse →</a></p>
+</div>
+{% endif %}
+
+<div class="report-actions">
+    <a href="/" class="btn-secondary">← Neue Analyse</a>
+</div>
+{% endblock %}
