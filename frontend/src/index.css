@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+@theme {
+  --color-gridbert-50: #f0fdf4;
+  --color-gridbert-100: #dcfce7;
+  --color-gridbert-200: #bbf7d0;
+  --color-gridbert-300: #86efac;
+  --color-gridbert-400: #4ade80;
+  --color-gridbert-500: #22c55e;
+  --color-gridbert-600: #16a34a;
+  --color-gridbert-700: #15803d;
+  --color-gridbert-800: #166534;
+  --color-gridbert-900: #14532d;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}

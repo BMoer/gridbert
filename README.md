@@ -1,117 +1,137 @@
-# ⚡ Gridbert — Dein persönlicher Energie-Agent
+# Gridbert — Dein persönlicher Energie-Agent
 
-Gridbert analysiert deine Stromrechnung, vergleicht Tarife über E-Control und zeigt dir, was du mit einer Bürgerenergiegemeinschaft (BEG) sparen kannst — alles lokal, ohne Cloud-APIs.
+Gridbert ist ein conversational AI-Agent, der österreichischen Konsumenten hilft, ihre Energiekosten zu optimieren. Er analysiert Stromrechnungen, vergleicht Tarife, holt Smart-Meter-Daten, simuliert PV-Anlagen und Batteriespeicher — und merkt sich alles für personalisierte Empfehlungen.
 
-## Was macht Gridbert?
+## Was kann Gridbert?
 
-1. **Rechnung analysieren** — PDF hochladen, Gridbert liest Lieferant, Tarif, Verbrauch und Preis per OCR (Ollama + Qwen2.5)
-2. **Smart-Meter-Daten holen** *(optional)* — Echte Verbrauchsdaten von Wiener Netze
-3. **Tarife vergleichen** — Automatischer Vergleich über die E-Control Tarifkalkulator-API
-4. **BEG-Vorteil berechnen** — Ersparnis durch 7Energy Bürgerenergiegemeinschaft
-5. **Report generieren** — Alles zusammen in einem übersichtlichen Einsparungs-Report
+| Fähigkeit | Beschreibung |
+|-----------|-------------|
+| **Rechnungs-OCR** | PDF oder Bild hochladen — Gridbert liest Lieferant, Tarif, Verbrauch und Preis via Claude Vision |
+| **Smart Meter** | Verbrauchsdaten direkt vom Netzbetreiber holen (Wiener Netze, Netz NÖ, Netz OÖ, …) |
+| **Tarifvergleich** | Strom- und Gastarife über die E-Control Tarifkalkulator-API vergleichen |
+| **BEG-Vergleich** | Bürgerenergiegemeinschaften vergleichen und Ersparnis berechnen |
+| **Lastprofil-Analyse** | 15-Minuten-Daten auswerten: Grundlast, Spitzenlast, Anomalien, Sparpotenziale |
+| **Spot-Tarif-Analyse** | ENTSO-E Day-Ahead-Preise vs. Fixpreis — lohnt sich ein Spot-Tarif? |
+| **PV-Simulation** | Balkonkraftwerk oder PV-Anlage simulieren (PVGIS API), Amortisation berechnen |
+| **Batteriespeicher** | Speicher-Szenarien (2–15 kWh) mit Spot-Preisen simulieren |
+| **Energie-News** | Aktuelle Nachrichten, Marktentwicklungen und Förderungen personalisiert aufbereiten |
+| **Persönliches Gedächtnis** | Gridbert merkt sich deine Situation und gibt zunehmend bessere Empfehlungen |
+
+## Architektur
+
+```
+React SPA (Vite + TailwindCSS)
+    │ SSE Streaming
+    ▼
+FastAPI Backend
+    │
+    ├── GridbertAgent (Claude API mit nativem Tool-Calling)
+    ├── Tool Registry (12 Tools, automatisch verfügbar)
+    └── SQLite / PostgreSQL (Conversations, Memory, Analysen)
+```
+
+**Kernprinzipien:**
+- **Agent-First** — Claude entscheidet welche Tools aufgerufen werden, keine hardcodierte Pipeline
+- **LLM nur für Sprache** — Alle Berechnungen sind deterministisches Python
+- **Alle Preise brutto** — Inklusive 20% österreichischer MwSt
 
 ## Voraussetzungen
 
 - **Python 3.11+**
-- **Ollama** — Lokale LLM-Inferenz ([ollama.com](https://ollama.com))
-- ca. 8 GB RAM für die Modelle
+- **Node.js 18+** (für Frontend)
+- **Anthropic API Key** ([console.anthropic.com](https://console.anthropic.com))
 
-## Installation
+## Schnellstart
 
 ```bash
 # 1. Repo klonen
-git clone https://github.com/your-username/gridbert.git
+git clone https://github.com/BMoer/gridbert.git
 cd gridbert
 
-# 2. Ollama installieren (falls noch nicht vorhanden)
-# macOS:
-brew install ollama
-# Oder: https://ollama.com/download
-
-# 3. Ollama starten und Modelle pullen
-ollama serve &
-ollama pull qwen2.5:7b
-ollama pull qwen2.5vl:7b
-
-# 4. Gridbert installieren
+# 2. Backend installieren
 pip install -e .
 
-# 5. Konfiguration (optional)
+# 3. Konfiguration
 cp .env.example .env
-# .env editieren falls nötig (Wiener Netze Credentials, anderer Ollama Host etc.)
+# ANTHROPIC_API_KEY und SECRET_KEY in .env setzen
+
+# 4. Frontend installieren
+cd frontend && npm install && cd ..
+
+# 5. Backend starten (Terminal 1)
+python3 -m gridbert.api.run
+
+# 6. Frontend starten (Terminal 2)
+cd frontend && npm run dev
 ```
 
-## Benutzung
+Dann im Browser öffnen: **http://localhost:5173**
 
-### Web-Oberfläche (empfohlen)
+## Docker
 
 ```bash
-python3 -m gridbert.main --web
+cp .env.example .env
+# .env editieren (mindestens ANTHROPIC_API_KEY und SECRET_KEY)
+docker compose up --build
 ```
 
-Dann im Browser öffnen: **http://localhost:5000**
-
-- Stromrechnung (PDF) hochladen
-- Optional: Wiener Netze Credentials für Smart-Meter-Daten eingeben
-- Gridbert analysiert und zeigt den Einsparungs-Report
-
-Optionen:
-```bash
-python3 -m gridbert.main --web --port 8080    # Anderer Port
-python3 -m gridbert.main --web -v             # Debug-Logging
-```
-
-### Kommandozeile
-
-```bash
-python3 -m gridbert.main rechnung.pdf
-python3 -m gridbert.main rechnung.pdf --wn-email user@example.com --wn-password geheim
-```
+Dann öffnen: **http://localhost:5000**
 
 ## Projektstruktur
 
 ```
 gridbert/
 ├── gridbert/
-│   ├── main.py               # CLI + Pipeline-Orchestrierung
-│   ├── agent.py               # LLM Agent-Loop (für zukünftige interaktive Nutzung)
-│   ├── config.py              # Konfiguration aus .env
-│   ├── models.py              # Pydantic Datenmodelle
-│   ├── personality.py         # Gridbert Persönlichkeit & System-Prompt
-│   ├── report.py              # Markdown Report-Generierung
-│   ├── tools/
-│   │   ├── invoice_parser.py  # Rechnungs-OCR via Ollama
-│   │   ├── smartmeter.py      # Wiener Netze Smart Meter API
-│   │   ├── tariff_compare.py  # E-Control Tarifvergleich
-│   │   └── beg_advisor.py     # 7Energy BEG-Berechnung
-│   └── web/
-│       ├── app.py             # Flask Web-Oberfläche
-│       ├── sse.py             # Server-Sent Events für Pipeline-Progress
-│       ├── templates/         # Jinja2 HTML Templates
-│       └── static/            # CSS + HTMX
+│   ├── agent/                  # Agent-Loop + Tool-Registry
+│   │   ├── loop.py             # Claude API Agent-Loop
+│   │   ├── tool_registry.py    # Tool-Definitionen + Dispatch
+│   │   └── types.py            # Event-Typen für SSE-Streaming
+│   ├── api/                    # FastAPI Backend
+│   │   ├── app.py              # App-Factory
+│   │   ├── routes/             # Chat, Auth, Conversations, Dashboard
+│   │   └── deps.py             # Dependency Injection
+│   ├── models/                 # Pydantic Datenmodelle
+│   ├── storage/                # SQLite/PostgreSQL Repositories
+│   ├── tools/                  # Alle Agent-Tools
+│   │   ├── invoice_parser.py   # Rechnungs-OCR (Claude Vision)
+│   │   ├── smartmeter.py       # Smart Meter API
+│   │   ├── tariff_compare.py   # E-Control Stromtarife
+│   │   ├── gas_compare.py      # E-Control Gastarife
+│   │   ├── beg_advisor.py      # BEG-Vergleich
+│   │   ├── load_profile.py     # Lastprofil-Analyse
+│   │   ├── spot_analysis.py    # ENTSO-E Spot-Tarif-Analyse
+│   │   ├── battery_sim.py      # Batteriespeicher-Simulation
+│   │   ├── pv_sim.py           # PV/Balkonkraftwerk-Simulation
+│   │   └── energy_monitor.py   # News, Preise, Förderungen
+│   ├── config.py               # Konfiguration aus .env
+│   └── personality.py          # Gridbert System-Prompt
+├── frontend/                   # React SPA
+│   ├── src/
+│   │   ├── components/Chat/    # Chat-UI mit SSE-Streaming
+│   │   ├── components/Layout/  # Sidebar, Navigation
+│   │   ├── hooks/              # useChat (SSE), API-Hooks
+│   │   └── stores/             # Zustand State Management
+│   └── vite.config.ts
+├── homeassistant/              # Home Assistant Integration
 ├── pyproject.toml
-├── .env.example
-└── CLAUDE.md                  # Projekt-Konventionen
+├── Dockerfile
+├── docker-compose.yml
+└── .env.example
 ```
-
-## Architektur-Prinzipien
-
-- **Kein Cloud-API** — Alles läuft lokal (Ollama für LLM, lokale APIs)
-- **LLM nur für Sprache** — OCR und Report-Text. Alle Berechnungen sind deterministisches Python
-- **Alle Preise brutto** — Inklusive 20% österreichischer MwSt
-- **Kein Over-Engineering** — Kein ORM, kein DB, kein async, plain dicts + Pydantic
 
 ## Konfiguration
 
-Umgebungsvariablen in `.env` (oder als CLI-Argumente):
+Umgebungsvariablen in `.env`:
 
-| Variable | Standard | Beschreibung |
-|----------|----------|-------------|
-| `OLLAMA_HOST` | `http://localhost:11434` | Ollama Server URL |
-| `OLLAMA_MODEL` | `qwen2.5:7b` | Text-Modell für Extraktion |
-| `OLLAMA_VISION_MODEL` | `qwen2.5vl:7b` | Vision-Modell (Fallback für Scan-PDFs) |
-| `WIENER_NETZE_EMAIL` | — | Wiener Netze Login (optional) |
-| `WIENER_NETZE_PASSWORD` | — | Wiener Netze Passwort (optional) |
+| Variable | Pflicht | Beschreibung |
+|----------|---------|-------------|
+| `ANTHROPIC_API_KEY` | Ja | Claude API Key |
+| `SECRET_KEY` | Ja (Prod) | JWT-Secret für Auth |
+| `DATABASE_URL` | Nein | PostgreSQL URL (default: SQLite) |
+| `CORS_ORIGINS` | Nein | Erlaubte Origins (default: localhost) |
+| `ENTSOE_API_KEY` | Nein | Für Spot-Tarif-Analyse |
+| `WIENER_NETZE_EMAIL` | Nein | Smart Meter Zugang |
+| `WIENER_NETZE_PASSWORD` | Nein | Smart Meter Passwort |
 
 ## Lizenz
 

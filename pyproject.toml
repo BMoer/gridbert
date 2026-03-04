@@ -3,25 +3,59 @@
 
 [project]
 name = "gridbert"
-version = "0.2.0"
-description = "Persönlicher Energie-Agent — Zeig mir was ich spare"
+version = "1.0.0"
+description = "Persönlicher Energie-Agent — Conversational AI für Energieoptimierung"
 license = "AGPL-3.0-only"
 requires-python = ">=3.11"
 dependencies = [
-    "ollama>=0.4",
-    "pydantic>=2.0",
+    # LLM
+    "anthropic>=0.40",
+    # API
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "python-multipart>=0.0.9",
+    # Auth
+    "python-jose[cryptography]>=3.3",
+    "bcrypt>=4.0",
+    # Database
+    "sqlalchemy>=2.0",
+    # Data & Models
+    "pydantic[email]>=2.0",
     "python-dotenv>=1.0",
     "httpx>=0.27",
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "openpyxl>=3.1",
+    # PDF
     "pdfplumber>=0.11",
     "Pillow>=10.0",
-    "flask>=3.0",
-    "markdown>=3.5",
     "fpdf2>=2.7",
+    # Report
+    "markdown>=3.5",
+]
+
+[project.optional-dependencies]
+# PostgreSQL für SaaS-Deployment
+postgres = ["psycopg[binary]>=3.1"]
+# Legacy Ollama für Self-Hosted
+ollama = ["ollama>=0.4"]
+# Phase 3: Erweiterte Analyse-Tools
+analysis = [
+    "scikit-fda>=0.9",
+    "matplotlib>=3.7",
+    "entsoe-py>=0.6",
+]
+# Entwicklung
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "httpx",
+    "ruff>=0.6",
 ]
 
 [project.scripts]
 gridbert = "gridbert.main:main"
-gridbert-web = "gridbert.web.app:run_web"
+gridbert-api = "gridbert.api.run:main"
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -30,3 +64,13 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["gridbert*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

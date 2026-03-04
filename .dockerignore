@@ -1,0 +1,14 @@
+# Gridbert — Docker Build Excludes
+.git
+.env
+*.pyc
+__pycache__
+.pytest_cache
+.ruff_cache
+node_modules
+frontend/node_modules
+frontend/dist
+*.egg-info
+.claude
+.venv
+venv
