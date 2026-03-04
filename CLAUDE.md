@@ -9,16 +9,19 @@ Personal energy agent for Austrian consumers. Conversational AI that analyzes el
 ## Commands
 
 ```bash
-# Install
+# Backend install
 pip install -e .           # core
 pip install -e ".[dev]"    # with pytest, ruff
-pip install -e ".[postgres]"  # SaaS with PostgreSQL
+pip install -e ".[analysis]"  # scikit-fda, matplotlib, entsoe-py
 
-# Run API server (FastAPI + Uvicorn on port 8000)
+# Frontend install
+cd frontend && npm install
+
+# Run backend (FastAPI + Uvicorn on port 8000)
 python3 -m gridbert.api.run
 
-# Run CLI (legacy pipeline mode)
-python3 -m gridbert.main rechnung.pdf
+# Run frontend (Vite dev server on port 5173, proxies /api → :8000)
+cd frontend && npm run dev
 
 # Run tests
 python3 -m pytest tests/ -v
@@ -27,6 +30,9 @@ python3 -m pytest tests/test_foo.py::test_specific -v
 # Lint
 python3 -m ruff check gridbert/
 python3 -m ruff format gridbert/
+
+# Frontend type check
+cd frontend && npx tsc --noEmit
 ```
 
 ## Architecture
@@ -91,6 +97,32 @@ tools/
     └── netz_noe.py     # Placeholder (+ 5 more planned: OÖ, Salzburg, Tirol, Steiermark, Kärnten)
 ```
 
+### Frontend (React + Vite + TailwindCSS)
+
+```
+frontend/src/
+├── components/
+│   ├── Chat/
+│   │   ├── ChatWindow.tsx      # Main chat view with auto-scroll
+│   │   ├── ChatInput.tsx       # Text input + file upload (PDF, images, CSV, Excel)
+│   │   └── MessageBubble.tsx   # Message rendering + expandable ToolIndicator
+│   ├── Dashboard/              # Adaptive widget dashboard
+│   └── Layout/                 # MainLayout, Sidebar (conversation list)
+├── hooks/
+│   └── useChat.ts              # SSE streaming, event parsing, file attachments
+├── stores/
+│   ├── chatStore.ts            # Zustand: messages, toolActivity (with input + summary), conversationId
+│   └── authStore.ts            # JWT token management
+└── api/client.ts               # REST helpers (auth, conversations, dashboard)
+```
+
+**Key patterns:**
+- `useChatStore.getState()` inside callbacks to avoid stale closures (no deps in useCallback)
+- `ToolActivity` tracks: tool name, status (running/done), input params, result summary
+- `MessageBubble` → `ToolIndicator`: shows tool label + input context while running, expandable summary when done
+- File uploads: base64-encoded in request body as `attachments[]`. PDFs/images sent as Claude document/image blocks. CSV/Excel decoded to text via `_decode_tabular_file()` in `loop.py`.
+- Vite dev proxy: `/api` → `http://localhost:8000`
+
 ### Data flow
 
 1. User sends message via `POST /api/chat`
@@ -128,6 +160,16 @@ docker compose up -d
 ```
 
 Multi-stage Dockerfile: Node frontend build → Python runtime. Frontend served as static files via FastAPI `StaticFiles` mount at `/`. Data persisted in `gridbert-data` Docker volume at `/data/gridbert.db`.
+
+## File Upload Flow
+
+1. Frontend `ChatInput` accepts PDF, images, CSV, Excel via file picker or drag-and-drop
+2. Files are base64-encoded and sent as `attachments[]` in the `/api/chat` POST body
+3. `_build_user_content()` in `loop.py` routes by media type:
+   - `application/pdf` → Claude `document` block (native PDF reading)
+   - `image/*` → Claude `image` block (Vision)
+   - CSV/Excel → `_decode_tabular_file()` decodes to text, inlined in message (50k char limit)
+4. A text hint tells Claude the files are inline — no tool call needed to read them
 
 ## Optional Dependencies
 
