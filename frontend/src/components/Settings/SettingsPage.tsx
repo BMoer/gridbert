@@ -4,10 +4,13 @@ import {
   getLLMConfig,
   setLLMConfig,
   deleteLLMConfig,
+  resetAllData,
   type LLMConfig,
   type ApiError,
 } from "../../api/client";
 import { useAuthStore } from "../../stores/authStore";
+import { useChatStore } from "../../stores/chatStore";
+import { useDashboardStore } from "../../stores/dashboardStore";
 
 const PROVIDERS = [
   {
@@ -385,6 +388,50 @@ export function SettingsPage() {
                   {saving ? "Wird geprüft..." : "Speichern"}
                 </button>
               </form>
+
+              {/* Debug: Reset all data */}
+              <div
+                style={{
+                  marginTop: "2rem",
+                  padding: "1rem",
+                  borderRadius: "var(--radius-md)",
+                  border: "1.5px dashed var(--fehler)",
+                  opacity: 0.7,
+                }}
+              >
+                <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.7rem", color: "var(--fehler)", marginBottom: "0.5rem" }}>
+                  DEBUG
+                </div>
+                <p style={{ fontFamily: "var(--font-body)", fontSize: "0.8rem", color: "var(--ink)", marginBottom: "0.75rem", lineHeight: 1.4 }}>
+                  Alle Gespräche, Dateien, Merkliste, Dashboard-Widgets und API-Schlüssel löschen. Dein Account bleibt bestehen.
+                </p>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!window.confirm("Wirklich ALLE Daten löschen? Das kann nicht rückgängig gemacht werden.")) return;
+                    try {
+                      await resetAllData();
+                      setConfig({ provider: "", model: "", has_key: false });
+                      setApiKey("");
+                      useChatStore.getState().reset();
+                      useDashboardStore.setState({ widgets: [], userFiles: [], userMemory: [], loaded: false });
+                      setSuccess("Alle Daten wurden gelöscht.");
+                      setError("");
+                    } catch (err) {
+                      setError((err as ApiError)?.message || "Reset fehlgeschlagen");
+                    }
+                  }}
+                  className="rounded-lg px-4 py-1.5 text-sm font-medium"
+                  style={{
+                    color: "white",
+                    background: "var(--fehler)",
+                    border: "none",
+                    cursor: "pointer",
+                  }}
+                >
+                  Alle Daten zurücksetzen
+                </button>
+              </div>
             </>
           )}
         </div>
