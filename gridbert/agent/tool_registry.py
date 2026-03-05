@@ -74,8 +74,16 @@ class ToolRegistry:
         return list(self._definitions.keys())
 
 
-def build_default_registry() -> ToolRegistry:
-    """Erstelle Registry mit allen Gridbert-Tools."""
+def build_default_registry(
+    user_id: int | None = None,
+    db_conn: Any | None = None,
+) -> ToolRegistry:
+    """Erstelle Registry mit allen Gridbert-Tools.
+
+    Args:
+        user_id: Aktueller User (für Memory-Tool).
+        db_conn: SQLAlchemy Connection (für Memory-Tool).
+    """
     registry = ToolRegistry()
 
     # --- Invoice Parser -------------------------------------------------------
@@ -253,17 +261,33 @@ def build_default_registry() -> ToolRegistry:
     registry.register(
         name="analyze_load_profile",
         description=(
-            "Analysiere ein Lastprofil (15-Minuten-Verbrauchsdaten). "
-            "Berechnet Grundlast, Spitzenlast, Volllaststunden, erkennt Anomalien, "
-            "schätzt Einsparpotenziale und erstellt Visualisierungen (Heatmap, "
-            "Jahresdauerlinie, Monatsverbrauch)."
+            "Analysiere ein Lastprofil (15-Minuten-Verbrauchsdaten) und erstelle "
+            "Visualisierungen (Heatmap, Jahresdauerlinie, Monatsverbrauch). "
+            "Berechnet Grundlast, Spitzenlast, Volllaststunden, erkennt Anomalien "
+            "und schätzt Einsparpotenziale. "
+            "Funktioniert mit hochgeladenen CSV/Excel-Dateien UND Smart-Meter-Daten. "
+            "Kein Smart-Meter-Zugang nötig wenn der User eine Datei hochgeladen hat! "
+            "WICHTIG: Übergib hochgeladene CSV/Excel-Daten IMMER als csv_text. "
+            "Kopiere den GESAMTEN Dateiinhalt 1:1 in csv_text. "
+            "Verwende NIEMALS consumption_data für hochgeladene Dateien."
         ),
         input_schema={
             "type": "object",
             "properties": {
+                "csv_text": {
+                    "type": "string",
+                    "description": (
+                        "Der GESAMTE CSV-Text der hochgeladenen Datei — 1:1 kopieren, "
+                        "NICHT umformatieren oder in ein Array konvertieren. "
+                        "Spalten werden automatisch erkannt."
+                    ),
+                },
                 "consumption_data": {
                     "type": "array",
-                    "description": "15-Minuten-Verbrauchsdaten als Liste von {timestamp, kwh}",
+                    "description": (
+                        "NUR für bereits strukturierte Daten aus anderen Tools (z.B. Smart Meter). "
+                        "NIEMALS für vom User hochgeladene Dateien verwenden — dafür csv_text nutzen."
+                    ),
                     "items": {
                         "type": "object",
                         "properties": {
@@ -278,7 +302,6 @@ def build_default_registry() -> ToolRegistry:
                     "default": 0.20,
                 },
             },
-            "required": ["consumption_data"],
         },
         handler=analyze_load_profile,
     )
@@ -360,7 +383,8 @@ def build_default_registry() -> ToolRegistry:
         description=(
             "Simuliere eine PV-Anlage oder Balkonkraftwerk. Nutzt die PVGIS API "
             "für Ertragsschätzung. Berechnet Eigenverbrauch, Ersparnis, Förderung "
-            "und Amortisation."
+            "und Amortisation. WICHTIG: Frag den User IMMER nach Ausrichtung und "
+            "Neigung bevor du dieses Tool aufrufst."
         ),
         input_schema={
             "type": "object",
@@ -373,8 +397,10 @@ def build_default_registry() -> ToolRegistry:
                 },
                 "ausrichtung": {
                     "type": "string",
-                    "description": "Ausrichtung: Süd, Südost, Südwest, Ost, West",
-                    "default": "Süd",
+                    "description": (
+                        "Ausrichtung des Balkons/Dachs: Süd, Südost, Südwest, Ost, West. "
+                        "MUSS vom User erfragt werden — niemals annehmen!"
+                    ),
                 },
                 "neigung": {
                     "type": "integer",
@@ -392,7 +418,7 @@ def build_default_registry() -> ToolRegistry:
                     "default": 20.0,
                 },
             },
-            "required": ["plz"],
+            "required": ["plz", "ausrichtung"],
         },
         handler=simulate_pv,
     )
@@ -454,5 +480,142 @@ def build_default_registry() -> ToolRegistry:
         },
         handler=monitor_energy_news,
     )
+
+    # --- Web Search ---------------------------------------------------------------
+    from gridbert.tools.web_search import web_search
+
+    registry.register(
+        name="web_search",
+        description=(
+            "Suche im Web nach aktuellen Informationen, Produktangeboten, Preisen "
+            "oder Nachrichten. Nützlich für Balkonkraftwerk-Preise, Batterie-Angebote, "
+            "Förderungsdetails oder aktuelle Marktpreise."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Suchbegriff (z.B. 'Balkonkraftwerk 800W Preis Österreich')",
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "Maximale Anzahl Ergebnisse (1-10, default: 5)",
+                    "default": 5,
+                },
+            },
+            "required": ["query"],
+        },
+        handler=web_search,
+    )
+
+    # --- User Memory & File Access (requires user context) ----------------------
+    if user_id is not None and db_conn is not None:
+        from gridbert.storage.repositories.memory_repo import upsert_memory
+
+        def _update_memory(fact_key: str, fact_value: str) -> str:
+            upsert_memory(db_conn, user_id, fact_key, fact_value, source="agent")
+            db_conn.commit()
+            return f"Gespeichert: {fact_key} = {fact_value}"
+
+        registry.register(
+            name="update_user_memory",
+            description=(
+                "Merke dir einen wichtigen Fakt über den User. Nutze dies um "
+                "Informationen zu speichern die in künftigen Gesprächen nützlich sind "
+                "(z.B. Name, PLZ, Verbrauch, Lieferant, Heizungsart, Interessen). "
+                "Jeder fact_key ist einzigartig pro User — gleicher Key überschreibt den alten Wert."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "fact_key": {
+                        "type": "string",
+                        "description": (
+                            "Schlüssel des Fakts, z.B. 'Name', 'PLZ', 'Jahresverbrauch_kWh', "
+                            "'Lieferant', 'Heizungsart', 'Interesse_PV', 'Interesse_Spot'"
+                        ),
+                    },
+                    "fact_value": {
+                        "type": "string",
+                        "description": "Wert des Fakts, z.B. 'Benjamin', '1060', '3200'",
+                    },
+                },
+                "required": ["fact_key", "fact_value"],
+            },
+            handler=_update_memory,
+        )
+
+        # --- Get User File --------------------------------------------------------
+        from gridbert.storage.repositories.file_repo import read_file_content
+        from gridbert.tools.file_utils import decode_tabular_bytes
+
+        def _get_user_file(file_id: int) -> str:
+            result = read_file_content(db_conn, user_id, file_id)
+            if result is None:
+                return "Fehler: Datei nicht gefunden oder kein Zugriff."
+
+            raw_bytes, file_meta = result
+            media_type = file_meta["media_type"]
+            file_name = file_meta["file_name"]
+
+            # CSV/Excel → decode to text
+            if (
+                media_type in (
+                    "text/csv",
+                    "application/vnd.ms-excel",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+                or file_name.endswith((".csv", ".xlsx", ".xls"))
+            ):
+                return decode_tabular_bytes(raw_bytes, media_type, file_name)
+
+            # PDF → extract text via pdfplumber
+            if media_type == "application/pdf" or file_name.endswith(".pdf"):
+                try:
+                    import pdfplumber
+
+                    import io
+                    pages_text = []
+                    with pdfplumber.open(io.BytesIO(raw_bytes)) as pdf:
+                        for page in pdf.pages:
+                            text = page.extract_text()
+                            if text:
+                                pages_text.append(text)
+                    return "\n\n".join(pages_text) if pages_text else "[PDF enthält keinen extrahierbaren Text.]"
+                except Exception as exc:
+                    return f"[FEHLER: PDF konnte nicht gelesen werden: {exc}]"
+
+            # Images → can't return content as text
+            if media_type.startswith("image/"):
+                return (
+                    f"[Datei {file_name} ist ein Bild ({media_type}). "
+                    "Bitte den User bitten, das Bild erneut in dieser Konversation hochzuladen, "
+                    "damit du es direkt sehen kannst.]"
+                )
+
+            return f"[Dateiformat {media_type} wird nicht unterstützt.]"
+
+        registry.register(
+            name="get_user_file",
+            description=(
+                "Lade eine zuvor hochgeladene Datei des Users anhand der Datei-ID. "
+                "Gibt den Dateiinhalt zurück (CSV/Excel als Text, PDF als extrahierter Text). "
+                "Nutze dies um auf gespeicherte Lastprofile, Rechnungen etc. zuzugreifen "
+                "ohne dass der User sie erneut hochladen muss. "
+                "Die verfügbaren Dateien und ihre IDs stehen im System-Prompt."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "file_id": {
+                        "type": "integer",
+                        "description": "ID der gespeicherten Datei (aus der Dateiliste im System-Prompt)",
+                    },
+                },
+                "required": ["file_id"],
+            },
+            handler=_get_user_file,
+        )
 
     return registry

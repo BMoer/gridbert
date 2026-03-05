@@ -123,9 +123,15 @@ function handleEvent(event: { type: string; data: Record<string, unknown> }) {
         event.data.summary as string,
       );
       break;
+    case "status":
+      store.setStatusMessage(event.data.message as string);
+      break;
     case "done":
       if (event.data.conversation_id) {
         store.setConversationId(event.data.conversation_id as number);
+      }
+      if (event.data.suggestions) {
+        store.setSuggestions(event.data.suggestions as string[]);
       }
       break;
   }

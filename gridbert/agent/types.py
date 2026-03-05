@@ -21,6 +21,7 @@ class EventType(str, Enum):
     TEXT_DELTA = "text_delta"
     TOOL_START = "tool_start"
     TOOL_RESULT = "tool_result"
+    STATUS = "status"
     WIDGET_ADD = "widget_add"
     WIDGET_UPDATE = "widget_update"
     ERROR = "error"

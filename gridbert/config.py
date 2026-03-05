@@ -17,7 +17,7 @@ ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
 
 # --- LLM (Claude API) --------------------------------------------------------
 ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
-CLAUDE_MODEL: str = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-20250514")
+CLAUDE_MODEL: str = os.getenv("CLAUDE_MODEL", "claude-haiku-4-5-20251001")
 CLAUDE_MAX_TOKENS: int = int(os.getenv("CLAUDE_MAX_TOKENS", "4096"))
 
 # --- Legacy Ollama (for self-hosted / fallback) --------------------------------
@@ -38,6 +38,9 @@ CORS_ORIGINS: list[str] = os.getenv("CORS_ORIGINS", "http://localhost:5173,http:
 # --- Wiener Netze Smart Meter -------------------------------------------------
 WIENER_NETZE_EMAIL: str = os.getenv("WIENER_NETZE_EMAIL", "")
 WIENER_NETZE_PASSWORD: str = os.getenv("WIENER_NETZE_PASSWORD", "")
+
+# --- File Uploads -------------------------------------------------------------
+UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", str(Path.home() / ".gridbert" / "uploads"))
 
 # --- ENTSO-E (spot prices, Phase 3) ------------------------------------------
 ENTSOE_API_KEY: str = os.getenv("ENTSOE_API_KEY", "")

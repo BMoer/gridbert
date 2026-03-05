@@ -87,6 +87,21 @@ user_memory = Table(
     # UNIQUE(user_id, fact_key) — handled via upsert logic
 )
 
+# --- Uploaded Files -----------------------------------------------------------
+
+uploaded_files = Table(
+    "uploaded_files",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", Integer, ForeignKey("users.id"), nullable=False),
+    Column("file_name", String, nullable=False),
+    Column("media_type", String, nullable=False),
+    Column("file_hash", String, nullable=False),  # SHA-256 for dedup
+    Column("disk_path", String, nullable=False),  # relative path under UPLOAD_DIR
+    Column("size_bytes", Integer, default=0),
+    Column("created_at", DateTime, server_default=func.now()),
+)
+
 # --- Dashboard Widgets --------------------------------------------------------
 
 dashboard_widgets = Table(

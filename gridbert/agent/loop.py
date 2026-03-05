@@ -6,8 +6,8 @@
 from __future__ import annotations
 
 import base64
-import io
 import logging
+import re
 from typing import Any
 
 import anthropic
@@ -19,6 +19,9 @@ from gridbert.config import ANTHROPIC_API_KEY, CLAUDE_MAX_TOKENS, CLAUDE_MODEL
 log = logging.getLogger(__name__)
 
 MAX_TURNS = 20
+
+# Pattern für Vorschläge am Ende einer Antwort
+_SUGGESTION_RE = re.compile(r"^>> (.+)$", re.MULTILINE)
 
 
 class GridbertAgent:
@@ -32,11 +35,13 @@ class GridbertAgent:
         self,
         tool_registry: ToolRegistry,
         user_memory: list[dict[str, str]] | None = None,
+        user_files: list[dict] | None = None,
         model: str = CLAUDE_MODEL,
     ) -> None:
         self._client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
         self._tools = tool_registry
         self._user_memory = user_memory or []
+        self._user_files = user_files or []
         self._model = model
 
     def _build_system_prompt(self) -> str:
@@ -52,6 +57,19 @@ class GridbertAgent:
             )
             parts.append(
                 f"\n## Was du über diesen User weißt\n{memory_lines}"
+            )
+
+        if self._user_files:
+            file_lines = "\n".join(
+                f"- [{f['id']}] {f['file_name']} ({f['media_type']}, "
+                f"{f['size_bytes'] // 1024}KB, {f['created_at']})"
+                for f in self._user_files
+            )
+            parts.append(
+                "\n## Gespeicherte Dateien des Users\n"
+                "Diese Dateien hat der User in früheren Gesprächen hochgeladen. "
+                "Du kannst sie mit get_user_file abrufen wenn sie für die aktuelle "
+                "Frage relevant sind.\n" + file_lines
             )
 
         return "\n\n".join(parts)
@@ -89,6 +107,14 @@ class GridbertAgent:
         for turn in range(max_turns):
             log.info("Agent Turn %d/%d", turn + 1, max_turns)
 
+            # Status-Event: Claude denkt nach
+            if on_event:
+                status_msg = "Gridbert denkt nach..." if turn == 0 else "Gridbert verarbeitet die Ergebnisse..."
+                on_event(AgentEvent(
+                    type=EventType.STATUS,
+                    data={"message": status_msg},
+                ))
+
             response = self._client.messages.create(
                 model=self._model,
                 system=system_prompt,
@@ -125,11 +151,19 @@ class GridbertAgent:
 
             # Keine Tool-Calls → Finale Antwort
             if response.stop_reason == "end_turn" or not tool_uses:
-                final_text = "\n".join(text_parts)
+                raw_text = "\n".join(text_parts)
+
+                # Vorschläge aus dem Text extrahieren
+                suggestions = _SUGGESTION_RE.findall(raw_text)
+                final_text = _SUGGESTION_RE.sub("", raw_text).rstrip("\n ")
+
                 if on_event:
+                    done_data: dict[str, Any] = {"final_text": final_text}
+                    if suggestions:
+                        done_data["suggestions"] = suggestions
                     on_event(AgentEvent(
                         type=EventType.DONE,
-                        data={"final_text": final_text},
+                        data=done_data,
                     ))
                 return final_text
 
@@ -218,11 +252,10 @@ def _build_user_content(
             # CSV/Excel — als Text dekodieren und inline einfügen
             file_name = attachment.get("file_name", "datei")
             file_text = _decode_tabular_file(data, media_type, file_name)
-            if file_text:
-                content.append({
-                    "type": "text",
-                    "text": f"[Inhalt von {file_name}]\n{file_text}",
-                })
+            content.append({
+                "type": "text",
+                "text": f"[Inhalt von {file_name}]\n{file_text}",
+            })
 
     # Hinweis an Claude: angehängte Daten sind direkt sichtbar
     has_docs = any(c.get("type") in ("document", "image") or
@@ -239,42 +272,22 @@ def _build_user_content(
 
 
 def _decode_tabular_file(data_b64: str, media_type: str, file_name: str) -> str:
-    """Base64-kodierte CSV/Excel-Datei dekodieren und als Text zurückgeben."""
+    """Base64-kodierte CSV/Excel-Datei dekodieren und als Text zurückgeben.
+
+    Returns error message (not empty string) on failure so Claude knows something went wrong.
+    """
+    if not data_b64:
+        return f"[FEHLER: Datei {file_name} ist leer — Upload fehlgeschlagen. Bitte erneut hochladen.]"
+
     try:
         raw = base64.b64decode(data_b64)
-    except Exception:
-        log.warning("Base64-Dekodierung fehlgeschlagen für %s", file_name)
-        return ""
+    except Exception as exc:
+        log.warning("Base64-Dekodierung fehlgeschlagen für %s: %s", file_name, exc)
+        return f"[FEHLER: Datei {file_name} konnte nicht dekodiert werden. Bitte erneut hochladen.]"
 
-    try:
-        if file_name.endswith((".xlsx", ".xls")) or media_type in (
-            "application/vnd.ms-excel",
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        ):
-            import pandas as pd
+    from gridbert.tools.file_utils import decode_tabular_bytes
 
-            df = pd.read_excel(io.BytesIO(raw))
-            text = df.to_csv(index=False)
-        else:
-            # CSV — versuche verschiedene Encodings
-            for encoding in ("utf-8", "utf-8-sig", "latin-1", "cp1252"):
-                try:
-                    text = raw.decode(encoding)
-                    break
-                except UnicodeDecodeError:
-                    continue
-            else:
-                text = raw.decode("utf-8", errors="replace")
-
-        # Auf ~50k Zeichen begrenzen damit Claude-Context nicht gesprengt wird
-        max_chars = 50_000
-        if len(text) > max_chars:
-            text = text[:max_chars] + f"\n\n[... gekürzt, {len(text)} Zeichen gesamt]"
-
-        return text
-    except Exception:
-        log.exception("Fehler beim Dekodieren von %s", file_name)
-        return ""
+    return decode_tabular_bytes(raw, media_type, file_name)
 
 
 def _block_to_dict(block: Any) -> dict[str, Any]:

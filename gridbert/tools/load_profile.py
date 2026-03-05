@@ -39,19 +39,33 @@ NIGHT_END = 4
 
 
 def analyze_load_profile(
-    consumption_data: list[dict],
+    consumption_data: list[dict] | None = None,
+    csv_text: str = "",
     price_per_kwh: float = 0.20,
 ) -> LoadProfileAnalysis:
     """Vollständige Lastprofil-Analyse.
 
     Args:
         consumption_data: Liste von {timestamp: ISO-string, kwh: float} Einträgen.
+        csv_text: Alternativ: CSV-Text mit Verbrauchsdaten (wird automatisch geparst).
+                  Spalten werden anhand von Namens-Heuristiken erkannt.
         price_per_kwh: Strompreis in EUR/kWh (brutto) für Sparpotenzialkalkulation.
 
     Returns:
         LoadProfileAnalysis mit Metriken, Anomalien, Sparpotenzialen und Visualisierungen.
     """
     try:
+        # csv_text takes priority — handles the case where Claude passes both
+        if csv_text:
+            consumption_data = _parse_csv_text(csv_text)
+
+        if not consumption_data:
+            return LoadProfileAnalysis(
+                metrics=_empty_metrics(),
+                analyse_erfolgreich=False,
+                fehler="Keine Daten übergeben. Bitte consumption_data oder csv_text angeben.",
+            )
+
         df = _prepare_dataframe(consumption_data)
         if df.empty or len(df) < 96:  # Minimum 1 Tag
             return LoadProfileAnalysis(
@@ -84,6 +98,134 @@ def analyze_load_profile(
             analyse_erfolgreich=False,
             fehler=str(exc),
         )
+
+
+# --- CSV Parsing ---
+
+
+def _parse_csv_text(csv_text: str) -> list[dict]:
+    """Parse raw CSV text into list of {timestamp, kwh} dicts.
+
+    Handles various column names (German/English), separators, and date formats.
+    Picks the separator that produces the most columns to avoid false matches.
+    """
+    if not csv_text or not csv_text.strip():
+        raise ValueError("CSV-Text ist leer.")
+
+    # Try all separators and pick the one that produces the most columns
+    best_df: pd.DataFrame | None = None
+    best_ncols = 0
+    for sep in [";", ",", "\t"]:
+        try:
+            df = pd.read_csv(io.StringIO(csv_text), sep=sep)
+            if len(df.columns) >= 2 and len(df.columns) > best_ncols:
+                best_df = df
+                best_ncols = len(df.columns)
+        except Exception:
+            continue
+
+    if best_df is None:
+        raise ValueError(
+            "CSV konnte nicht geparst werden — kein Separator (;  ,  Tab) ergab mindestens 2 Spalten."
+        )
+
+    df = best_df
+
+    # Drop completely empty rows
+    df = df.dropna(how="all")
+
+    # Normalize column names to lowercase
+    col_map = {c: c.lower().strip() for c in df.columns}
+    df = df.rename(columns=col_map)
+
+    # Find timestamp column — prefer exact matches, then substring
+    ts_col = _find_column(
+        df.columns,
+        exact=["timestamp", "zeitstempel", "datum", "date", "time", "zeit", "von"],
+        substring=["timestamp", "zeitstempel", "datum", "date", "zeit", "von", "from", "time"],
+    )
+    if ts_col is None:
+        # First column is likely the timestamp
+        ts_col = df.columns[0]
+
+    # Find value column — prefer exact matches, then substring, then first numeric
+    val_col = _find_column(
+        df.columns,
+        exact=["kwh", "verbrauch", "consumption", "wert", "value", "menge", "energy", "kw"],
+        substring=["kwh", "verbrauch", "consumption", "wert", "value", "menge", "energy"],
+        exclude={ts_col},
+    )
+    if val_col is None:
+        # Pick first column that can be parsed as numeric (not the timestamp)
+        for c in df.columns:
+            if c == ts_col:
+                continue
+            try:
+                sample = df[c].dropna().head(10)
+                if sample.empty:
+                    continue
+                if pd.api.types.is_numeric_dtype(sample):
+                    val_col = c
+                    break
+                # Try German decimal comma conversion
+                pd.to_numeric(sample.astype(str).str.replace(",", "."))
+                val_col = c
+                break
+            except Exception:
+                continue
+
+    if val_col is None:
+        cols_str = ", ".join(df.columns.tolist()[:10])
+        raise ValueError(
+            f"Keine Verbrauchsspalte in der CSV erkannt. Gefundene Spalten: {cols_str}"
+        )
+
+    # Parse values (handle German decimal comma)
+    if not pd.api.types.is_numeric_dtype(df[val_col]):
+        df[val_col] = pd.to_numeric(
+            df[val_col].astype(str).str.replace(",", "."),
+            errors="coerce",
+        )
+    else:
+        df[val_col] = df[val_col].astype(float)
+
+    # Drop rows where value couldn't be parsed
+    df = df.dropna(subset=[val_col])
+
+    if df.empty:
+        raise ValueError("Keine gültigen numerischen Werte in der Verbrauchsspalte gefunden.")
+
+    # Build result
+    result = []
+    for _, row in df.iterrows():
+        result.append({"timestamp": str(row[ts_col]), "kwh": float(row[val_col])})
+
+    log.info("CSV geparst: %d Datenpunkte, ts_col=%s, val_col=%s", len(result), ts_col, val_col)
+    return result
+
+
+def _find_column(
+    columns: pd.Index,
+    exact: list[str],
+    substring: list[str],
+    exclude: set[str] | None = None,
+) -> str | None:
+    """Find best matching column name — exact match first, then substring."""
+    exclude = exclude or set()
+    cols = [c for c in columns if c not in exclude]
+
+    # Exact match (highest priority)
+    for candidate in exact:
+        if candidate in cols:
+            return candidate
+
+    # Substring match (ordered by candidate priority)
+    for candidate in substring:
+        matches = [c for c in cols if candidate in c]
+        if matches:
+            return matches[0]
+
+    return None
 
 
 # --- Data Preparation ---

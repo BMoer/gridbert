@@ -196,12 +196,16 @@ def _estimate_self_consumption(anlage_kwp: float, verbrauch_kwh: float) -> float
 
 
 def _estimate_foerderung(anlage_kwp: float) -> float:
-    """Grobe Förderungsschätzung für Österreich."""
-    if anlage_kwp <= 1.0:
-        # BKW-Förderung: bis zu 420€ (EAG-Investitionszuschuss)
-        return 420.0
-    elif anlage_kwp <= 10.0:
-        # PV-Förderung: ca. 285 €/kWp (EAG 2025)
-        return min(anlage_kwp * 285, 2850)
-    else:
-        return min(anlage_kwp * 200, 5000)
+    """Förderungsschätzung basierend auf dem aktuellen Katalog."""
+    from gridbert.tools.energy_monitor import load_foerderungen_catalog
+
+    catalog, _stand = load_foerderungen_catalog()
+    pv_foerderung_pro_kwp = 160.0  # Fallback
+
+    for f in catalog:
+        if f.get("name") == "EAG Investitionszuschuss Photovoltaik" and f.get("status") == "aktiv":
+            if f.get("betrag_eur", 0) > 0:
+                pv_foerderung_pro_kwp = f["betrag_eur"]
+            break
+
+    return anlage_kwp * pv_foerderung_pro_kwp

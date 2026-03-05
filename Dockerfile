@@ -30,12 +30,13 @@ COPY gridbert/ gridbert/
 COPY --from=frontend-build /app/frontend/dist /app/static
 
 # Create non-root user
-RUN useradd -m -r gridbert && mkdir -p /data && chown gridbert:gridbert /data
+RUN useradd -m -r gridbert && mkdir -p /data /data/uploads && chown -R gridbert:gridbert /data
 USER gridbert
 
 # Environment
 ENV ENVIRONMENT=production
 ENV DATABASE_URL=sqlite:////data/gridbert.db
+ENV UPLOAD_DIR=/data/uploads
 ENV PORT=8000
 
 EXPOSE 8000

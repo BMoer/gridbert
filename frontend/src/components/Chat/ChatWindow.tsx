@@ -22,7 +22,11 @@ export function ChatWindow() {
         ) : (
           <div className="mx-auto max-w-2xl space-y-4">
             {messages.map((msg) => (
-              <MessageBubble key={msg.id} message={msg} />
+              <MessageBubble
+                key={msg.id}
+                message={msg}
+                onSuggestionClick={!isLoading ? sendMessage : undefined}
+              />
             ))}
             <div ref={bottomRef} />
           </div>

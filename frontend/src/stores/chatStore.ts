@@ -6,6 +6,8 @@ export interface ChatMessage {
   content: string;
   isStreaming?: boolean;
   toolActivity?: ToolActivity[];
+  suggestions?: string[];
+  statusMessage?: string;
 }
 
 export interface ToolActivity {
@@ -24,6 +26,8 @@ interface ChatState {
   appendToAssistant: (text: string) => void;
   addToolActivity: (tool: string, input?: Record<string, unknown>) => void;
   completeToolActivity: (tool: string, summary: string) => void;
+  setStatusMessage: (message: string) => void;
+  setSuggestions: (suggestions: string[]) => void;
   finishAssistantMessage: () => void;
   setConversationId: (id: number) => void;
   setLoading: (loading: boolean) => void;
@@ -96,12 +100,32 @@ export const useChatStore = create<ChatState>((set) => ({
       return { messages: msgs };
     }),
 
+  setStatusMessage: (message) =>
+    set((s) => {
+      const msgs = [...s.messages];
+      const last = msgs[msgs.length - 1];
+      if (last?.role === "assistant") {
+        msgs[msgs.length - 1] = { ...last, statusMessage: message };
+      }
+      return { messages: msgs };
+    }),
+
+  setSuggestions: (suggestions) =>
+    set((s) => {
+      const msgs = [...s.messages];
+      const last = msgs[msgs.length - 1];
+      if (last?.role === "assistant") {
+        msgs[msgs.length - 1] = { ...last, suggestions };
+      }
+      return { messages: msgs };
+    }),
+
   finishAssistantMessage: () =>
     set((s) => {
       const msgs = [...s.messages];
       const last = msgs[msgs.length - 1];
       if (last?.role === "assistant") {
-        msgs[msgs.length - 1] = { ...last, isStreaming: false };
+        msgs[msgs.length - 1] = { ...last, isStreaming: false, statusMessage: undefined };
       }
       return { messages: msgs };
     }),

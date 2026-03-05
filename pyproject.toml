@@ -32,6 +32,8 @@ dependencies = [
     "fpdf2>=2.7",
     # Report
     "markdown>=3.5",
+    # Web search
+    "duckduckgo-search>=7.0",
 ]
 
 [project.optional-dependencies]

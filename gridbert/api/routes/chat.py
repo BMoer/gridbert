@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import json
 import logging
+import queue
+import threading
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, UploadFile, status
@@ -15,7 +17,7 @@ from pydantic import BaseModel, Field
 
 from gridbert.agent.loop import GridbertAgent
 from gridbert.agent.tool_registry import build_default_registry
-from gridbert.agent.types import AgentEvent
+from gridbert.agent.types import AgentEvent, EventType
 from gridbert.api.deps import CurrentUserId, DbConn
 from gridbert.config import ANTHROPIC_API_KEY
 from gridbert.storage.repositories.chat_repo import (
@@ -23,6 +25,7 @@ from gridbert.storage.repositories.chat_repo import (
     create_conversation,
     get_messages,
 )
+from gridbert.storage.repositories.file_repo import get_user_files, save_file
 from gridbert.storage.repositories.memory_repo import get_user_memories
 
 log = logging.getLogger(__name__)
@@ -76,58 +79,93 @@ def chat(
     # User-Nachricht persistieren
     add_message(conn, conversation_id, role="user", content=req.message)
 
+    # Datei-Anhänge auf Disk speichern
+    if req.attachments:
+        for att in req.attachments:
+            if att.data:
+                try:
+                    save_file(conn, user_id, att.file_name, att.media_type, att.data)
+                except Exception:
+                    log.exception("Fehler beim Speichern von %s", att.file_name)
+
     # Bisherige Messages laden und zu Claude API Format konvertieren
     history = get_messages(conn, conversation_id, limit=50)
     claude_messages = _history_to_claude_messages(history)
 
-    # User-Memory laden
+    # User-Memory und gespeicherte Dateien laden
     memories = get_user_memories(conn, user_id)
+    user_files = get_user_files(conn, user_id)
 
     # Initiale Writes committen damit SQLite-Lock freigegeben wird
     conn.commit()
 
-    # Agent bauen
-    registry = build_default_registry()
+    # Agent bauen — mit User-Kontext für Memory-Tool und Datei-Zugriff
+    registry = build_default_registry(user_id=user_id, db_conn=conn)
     agent = GridbertAgent(
         tool_registry=registry,
         user_memory=memories,
+        user_files=user_files,
     )
 
     def event_stream():
-        """SSE Generator — Agent-Events als Server-Sent Events."""
-        events: list[AgentEvent] = []
+        """SSE Generator — streamt Events in Echtzeit via Thread + Queue."""
+        event_queue: queue.Queue[AgentEvent | None] = queue.Queue()
 
-        def collect_event(event: AgentEvent) -> None:
-            events.append(event)
+        def on_event(event: AgentEvent) -> None:
+            event_queue.put(event)
 
         # Attachments für den Agent aufbereiten
         agent_attachments = None
         if req.attachments:
             agent_attachments = [
-                {"type": att.type, "media_type": att.media_type, "data": att.data}
+                {"type": att.type, "media_type": att.media_type, "data": att.data, "file_name": att.file_name}
                 for att in req.attachments
             ]
 
-        # Agent ausführen (synchron — Tool Calls blockieren)
-        final_text = agent.run(
-            user_message=req.message,
-            conversation_history=claude_messages[:-1],  # letzte User-Message ist schon drin
-            on_event=collect_event,
-            attachments=agent_attachments,
-        )
+        final_text_holder: list[str] = []
 
-        # Events als SSE senden
-        for event in events:
+        def run_agent():
+            try:
+                result = agent.run(
+                    user_message=req.message,
+                    conversation_history=claude_messages[:-1],
+                    on_event=on_event,
+                    attachments=agent_attachments,
+                )
+                final_text_holder.append(result)
+            except Exception as exc:
+                log.exception("Agent-Fehler")
+                event_queue.put(AgentEvent(
+                    type=EventType.ERROR,
+                    data={"message": str(exc)},
+                ))
+            finally:
+                event_queue.put(None)  # Sentinel: Stream beenden
+
+        # Agent in Background-Thread starten
+        thread = threading.Thread(target=run_agent, daemon=True)
+        thread.start()
+
+        # Events in Echtzeit an den Client senden
+        while True:
+            event = event_queue.get()
+            if event is None:
+                break
             yield f"data: {event.model_dump_json()}\n\n"
 
-        # Assistant-Antwort persistieren (gleiche conn, SQLite verträgt keine parallelen Writes)
+        # Auf Agent-Thread warten
+        thread.join(timeout=5)
+
+        # Assistant-Antwort persistieren
+        final_text = final_text_holder[0] if final_text_holder else ""
         try:
-            add_message(conn, conversation_id, role="assistant", content=final_text)
-            conn.commit()
+            if final_text:
+                add_message(conn, conversation_id, role="assistant", content=final_text)
+                conn.commit()
         except Exception:
             log.exception("Fehler beim Speichern der Assistant-Antwort")
 
-        # Finale SSE
+        # Finale SSE mit Conversation-ID
         done_data = json.dumps({
             "type": "done",
             "data": {"conversation_id": conversation_id},

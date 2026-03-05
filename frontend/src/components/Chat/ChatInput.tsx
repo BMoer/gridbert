@@ -9,8 +9,11 @@ interface Props {
 export function ChatInput({ onSend, disabled }: Props) {
   const [text, setText] = useState("");
   const [files, setFiles] = useState<FileAttachment[]>([]);
+  const [pendingReads, setPendingReads] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const filesReady = pendingReads === 0;
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -21,7 +24,7 @@ export function ChatInput({ onSend, disabled }: Props) {
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if ((!text.trim() && files.length === 0) || disabled) return;
+    if ((!text.trim() && files.length === 0) || disabled || !filesReady) return;
     const msg = text.trim() || (files.length > 0 ? `Analysiere ${files.map((f) => f.name).join(", ")}` : "");
     onSend(msg, files.length > 0 ? files : undefined);
     setText("");
@@ -39,11 +42,22 @@ export function ChatInput({ onSend, disabled }: Props) {
     const selected = e.target.files;
     if (!selected) return;
 
-    Array.from(selected).forEach((file) => {
+    const fileArray = Array.from(selected);
+    setPendingReads((prev) => prev + fileArray.length);
+
+    fileArray.forEach((file) => {
       const reader = new FileReader();
       reader.onload = () => {
-        const base64 = (reader.result as string).split(",")[1];
-        setFiles((prev) => [...prev, { name: file.name, type: file.type, data: base64 }]);
+        const result = reader.result as string;
+        const base64 = result.split(",")[1] ?? "";
+        if (base64) {
+          setFiles((prev) => [...prev, { name: file.name, type: file.type, data: base64 }]);
+        }
+        setPendingReads((prev) => prev - 1);
+      };
+      reader.onerror = () => {
+        console.error(`[ChatInput] FileReader error for: ${file.name}`);
+        setPendingReads((prev) => prev - 1);
       };
       reader.readAsDataURL(file);
     });
@@ -59,7 +73,7 @@ export function ChatInput({ onSend, disabled }: Props) {
   return (
     <form onSubmit={handleSubmit} className="border-t border-gray-200 bg-white p-4">
       {/* File preview */}
-      {files.length > 0 && (
+      {(files.length > 0 || pendingReads > 0) && (
         <div className="mb-2 flex flex-wrap gap-2">
           {files.map((file, i) => (
             <div
@@ -79,6 +93,12 @@ export function ChatInput({ onSend, disabled }: Props) {
               </button>
             </div>
           ))}
+          {pendingReads > 0 && (
+            <div className="flex items-center gap-1 rounded-lg bg-gridbert-50 px-2.5 py-1 text-xs text-gridbert-600">
+              <span className="h-3 w-3 animate-spin rounded-full border-2 border-gridbert-200 border-t-gridbert-500" />
+              {pendingReads === 1 ? "Datei wird geladen..." : `${pendingReads} Dateien werden geladen...`}
+            </div>
+          )}
         </div>
       )}
 
@@ -116,7 +136,7 @@ export function ChatInput({ onSend, disabled }: Props) {
         />
         <button
           type="submit"
-          disabled={disabled || (!text.trim() && files.length === 0)}
+          disabled={disabled || !filesReady || (!text.trim() && files.length === 0)}
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gridbert-500 text-white hover:bg-gridbert-600 disabled:opacity-50"
         >
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">

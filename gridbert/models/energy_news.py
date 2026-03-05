@@ -24,16 +24,23 @@ class EnergyNewsItem(BaseModel):
 
 
 class Foerderung(BaseModel):
-    """Eine Förderung / Subvention."""
+    """Eine Förderung / Subvention mit Gültigkeits- und Quellendaten."""
 
     name: str
     beschreibung: str
     betrag_eur: float = 0.0
-    betrag_text: str = ""  # z.B. "bis zu 900€"
+    betrag_text: str = ""  # z.B. "160 €/kWp"
     bundesland: str = ""  # leer = bundesweit
     zielgruppe: str = ""  # z.B. "Privatpersonen", "Unternehmen"
+    kategorie: str = ""  # "pv", "speicher", "heizung", "sanierung", "bkw", "emobil"
     url: str = ""
-    ablauf_datum: str = ""
+    quelle: str = ""  # Offizielle Quelle für Verifizierung
+    status: str = "aktiv"  # "aktiv", "ausgelaufen", "geplant"
+    gueltig_ab: str = ""  # ISO-Datum, z.B. "2025-01-01"
+    gueltig_bis: str = ""  # ISO-Datum, z.B. "2026-12-31"
+    stand: str = ""  # Datum der letzten Verifizierung, z.B. "2026-03-05"
+    voraussetzungen: str = ""  # Kurzbeschreibung der Voraussetzungen
+    hinweis: str = ""  # Zusätzliche Hinweise (z.B. "nicht mit Bundesförderung kombinierbar")
 
 
 class EnergyMonitorResult(BaseModel):
@@ -43,3 +50,4 @@ class EnergyMonitorResult(BaseModel):
     foerderungen: list[Foerderung] = Field(default_factory=list)
     preis_warnung: str = ""  # z.B. "Spotpreise morgen 40% über Durchschnitt"
     zusammenfassung: str = ""  # Personalisierte Zusammenfassung
+    katalog_stand: str = ""  # Datum des Förderungskatalogs

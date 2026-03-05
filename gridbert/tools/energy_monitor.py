@@ -6,14 +6,16 @@
 Three pillars:
 1. Geopolitics & Markets — RSS feeds + Claude summarization
 2. Spot & Wholesale Prices — ENTSO-E price alerts
-3. Förderungen & Subsidies — Curated catalog filtered by user profile
+3. Förderungen & Subsidies — Curated JSON catalog filtered by user profile
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import xml.etree.ElementTree as ET
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from pathlib import Path
 
 import httpx
 
@@ -49,66 +51,6 @@ _ENERGY_KEYWORDS = [
     "ukraine", "sanktion", "embargo", "nahost",
 ]
 
-# Kuratierte Förderungen (Stand 2025/2026)
-_FOERDERUNGEN: list[dict] = [
-    {
-        "name": "EAG Investitionszuschuss PV",
-        "beschreibung": "Bis zu 285 €/kWp für Photovoltaik-Anlagen bis 1000 kWp.",
-        "betrag_text": "285 €/kWp",
-        "bundesland": "",
-        "zielgruppe": "Privatpersonen, Unternehmen",
-        "url": "https://www.klimafonds.gv.at/",
-    },
-    {
-        "name": "Balkonkraftwerk-Förderung",
-        "beschreibung": "420€ Pauschalförderung für steckerfertige PV-Anlagen bis 800W.",
-        "betrag_text": "420 €",
-        "bundesland": "",
-        "zielgruppe": "Privatpersonen",
-        "url": "https://www.klimafonds.gv.at/",
-    },
-    {
-        "name": "Sanierungsbonus",
-        "beschreibung": "Bis zu 42.000€ für thermische Gebäudesanierung.",
-        "betrag_text": "bis 42.000 €",
-        "bundesland": "",
-        "zielgruppe": "Privatpersonen",
-        "url": "https://www.umweltfoerderung.at/",
-    },
-    {
-        "name": "Raus aus Öl und Gas",
-        "beschreibung": "Bis zu 7.500€ für den Umstieg von fossiler Heizung auf klimafreundliche Systeme.",
-        "betrag_text": "bis 7.500 €",
-        "bundesland": "",
-        "zielgruppe": "Privatpersonen",
-        "url": "https://www.umweltfoerderung.at/",
-    },
-    {
-        "name": "Wien: Photovoltaik-Förderung",
-        "beschreibung": "Zusätzlich 250 €/kWp für PV-Anlagen in Wien.",
-        "betrag_text": "250 €/kWp",
-        "bundesland": "Wien",
-        "zielgruppe": "Privatpersonen",
-        "url": "https://www.wien.gv.at/",
-    },
-    {
-        "name": "NÖ: Stromspeicher-Förderung",
-        "beschreibung": "200 €/kWh für Batteriespeicher in Niederösterreich.",
-        "betrag_text": "200 €/kWh",
-        "bundesland": "Niederösterreich",
-        "zielgruppe": "Privatpersonen",
-        "url": "https://www.noe.gv.at/",
-    },
-    {
-        "name": "OÖ: PV & Speicher Förderung",
-        "beschreibung": "Bis zu 1.500€ für PV-Anlagen und Speicher in Oberösterreich.",
-        "betrag_text": "bis 1.500 €",
-        "bundesland": "Oberösterreich",
-        "zielgruppe": "Privatpersonen",
-        "url": "https://www.land-oberoesterreich.gv.at/",
-    },
-]
-
 # PLZ → Bundesland Mapping (erste Ziffer)
 _PLZ_BUNDESLAND: dict[str, str] = {
     "1": "Wien",
@@ -121,6 +63,47 @@ _PLZ_BUNDESLAND: dict[str, str] = {
     "8": "Steiermark",
     "9": "Kärnten",
 }
+
+# Förderungskatalog-Pfad
+_FOERDERUNGEN_PATH = Path(__file__).parent.parent / "data" / "foerderungen.json"
+
+# Warnung wenn Katalog älter als 60 Tage
+_KATALOG_MAX_AGE_DAYS = 60
+
+
+def load_foerderungen_catalog() -> tuple[list[dict], str]:
+    """Lade Förderungskatalog aus JSON-Datei.
+
+    Returns:
+        Tuple von (Liste der Förderungen, Stand-Datum des Katalogs).
+    """
+    try:
+        raw = _FOERDERUNGEN_PATH.read_text(encoding="utf-8")
+        catalog = json.loads(raw)
+        stand = catalog.get("_meta", {}).get("stand", "unbekannt")
+        return catalog.get("foerderungen", []), stand
+    except Exception as exc:
+        log.error("Förderungskatalog konnte nicht geladen werden: %s", exc)
+        return [], "unbekannt"
+
+
+def _check_catalog_freshness(stand: str) -> str:
+    """Prüfe ob der Katalog aktuell ist. Gibt Warntext zurück wenn veraltet."""
+    if not stand or stand == "unbekannt":
+        return "Förderungskatalog: Stand unbekannt — Angaben bitte selbst verifizieren."
+
+    try:
+        stand_date = date.fromisoformat(stand)
+        age_days = (date.today() - stand_date).days
+        if age_days > _KATALOG_MAX_AGE_DAYS:
+            return (
+                f"Förderungskatalog ist {age_days} Tage alt (Stand: {stand}). "
+                "Angaben könnten veraltet sein — bitte offizielle Quellen prüfen."
+            )
+    except ValueError:
+        return "Förderungskatalog: Stand-Datum ungültig."
+
+    return ""
 
 
 def monitor_energy_news(
@@ -139,13 +122,19 @@ def monitor_energy_news(
         EnergyMonitorResult mit Nachrichten, Förderungen und ggf. Preiswarnung.
     """
     nachrichten = _fetch_energy_news()
-    foerderungen = _filter_foerderungen(user_plz)
+    foerderungen_raw, katalog_stand = load_foerderungen_catalog()
+    foerderungen = _filter_foerderungen(foerderungen_raw, user_plz, user_interests)
     preis_warnung = _check_price_alert()
+
+    freshness_warning = _check_catalog_freshness(katalog_stand)
+    zusammenfassung = freshness_warning
 
     return EnergyMonitorResult(
         nachrichten=nachrichten,
         foerderungen=foerderungen,
         preis_warnung=preis_warnung,
+        zusammenfassung=zusammenfassung,
+        katalog_stand=katalog_stand,
     )
 
 
@@ -216,24 +205,55 @@ def _clean_html(text: str) -> str:
     return re.sub(r"<[^>]+>", "", text).strip()
 
 
-def _filter_foerderungen(plz: str) -> list[Foerderung]:
-    """Förderungen nach PLZ/Bundesland filtern."""
+def _filter_foerderungen(
+    catalog: list[dict],
+    plz: str,
+    user_interests: list[str] | None = None,
+) -> list[Foerderung]:
+    """Förderungen nach PLZ/Bundesland und Status filtern.
+
+    Only returns active Förderungen matching the user's region.
+    Expired ones are excluded unless they were recently active (for reference).
+    """
     bundesland = ""
     if plz:
         bundesland = _PLZ_BUNDESLAND.get(plz[0], "")
 
+    today_str = date.today().isoformat()
     result: list[Foerderung] = []
-    for f in _FOERDERUNGEN:
-        # Bundesweite Förderungen immer inkludieren
-        if not f["bundesland"] or f["bundesland"] == bundesland:
-            result.append(Foerderung(
-                name=f["name"],
-                beschreibung=f["beschreibung"],
-                betrag_text=f["betrag_text"],
-                bundesland=f.get("bundesland", ""),
-                zielgruppe=f.get("zielgruppe", ""),
-                url=f.get("url", ""),
-            ))
+
+    for f in catalog:
+        # Skip expired Förderungen
+        if f.get("status") == "ausgelaufen":
+            continue
+
+        # Regional filter: include nationwide + matching Bundesland
+        f_bl = f.get("bundesland", "")
+        if f_bl and f_bl != bundesland:
+            continue
+
+        # Check validity dates if present
+        gueltig_bis = f.get("gueltig_bis", "")
+        if gueltig_bis and gueltig_bis < today_str:
+            continue
+
+        result.append(Foerderung(
+            name=f["name"],
+            beschreibung=f.get("beschreibung", ""),
+            betrag_eur=f.get("betrag_eur", 0.0),
+            betrag_text=f.get("betrag_text", ""),
+            bundesland=f_bl,
+            zielgruppe=f.get("zielgruppe", ""),
+            kategorie=f.get("kategorie", ""),
+            url=f.get("url", ""),
+            quelle=f.get("quelle", ""),
+            status=f.get("status", "aktiv"),
+            gueltig_ab=f.get("gueltig_ab", ""),
+            gueltig_bis=gueltig_bis,
+            stand=f.get("stand", ""),
+            voraussetzungen=f.get("voraussetzungen", ""),
+            hinweis=f.get("hinweis", ""),
+        ))
 
     return result
 
