@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What is Gridbert?
 
-Personal energy agent for Austrian consumers. Conversational AI that analyzes electricity bills (PDF/image OCR), fetches smart meter data, compares tariffs via E-Control API, evaluates BEG options, and generates savings reports. Built as a SaaS web service with a React frontend and FastAPI backend, powered by Claude API with native tool calling.
+Personal energy agent for Austrian consumers. Conversational AI that analyzes electricity bills (PDF/image OCR), fetches smart meter data, compares tariffs via E-Control API, evaluates BEG options, and generates savings reports. Built as a SaaS web service with a React frontend and FastAPI backend. Multi-provider LLM support (Claude + OpenAI) — users bring their own API key or fall back to server-configured key.
 
 ## Commands
 
@@ -38,13 +38,33 @@ cd frontend && npm run build
 
 ## Architecture
 
-### Agent-first design — Claude decides what to do
+### Agent-first design — LLM decides what to do
 
-**`agent/loop.py:GridbertAgent.run()`** is the core. Claude API with native tool calling replaces the old regex-based agent. The LLM decides which tools to call, feeds results back, loops until done. No hardcoded pipeline.
+**`agent/loop.py:GridbertAgent.run()`** is the core. Provider-agnostic agent loop with native tool calling. The LLM decides which tools to call, feeds results back, loops until done. No hardcoded pipeline.
 
-**`agent/tool_registry.py`** maps Python functions → Claude API tool definitions (JSON Schema). `build_default_registry()` registers all tools. To add a new tool: register it in the registry with name, description, input_schema, and handler function.
+**`agent/tool_registry.py`** maps Python functions → tool definitions (JSON Schema). `build_default_registry()` registers all tools. To add a new tool: register it in the registry with name, description, input_schema, and handler function.
 
 **`agent/loop.py`** also emits `WIDGET_ADD`/`WIDGET_UPDATE` SSE events when the `add_dashboard_widget` tool is called, so the frontend dashboard updates live during conversation.
+
+### LLM Provider Abstraction
+
+```
+llm/
+├── __init__.py          # LLMProvider Protocol + create_provider() factory
+├── types.py             # LLMTextBlock, LLMToolUseBlock, LLMResponse (frozen dataclasses)
+├── claude_provider.py   # Anthropic Claude implementation
+└── openai_provider.py   # OpenAI GPT implementation
+```
+
+**`LLMProvider` Protocol** — same pattern as `SmartMeterProvider`. Each provider implements:
+- `chat(system, messages, tools, max_tokens) → LLMResponse`
+- `build_user_content(text, attachments)` — provider-specific content formatting
+- `build_tool_results_message(tool_results)` — tool result message format
+- `response_to_history(response)` — convert response to conversation history format
+
+**Provider resolution** in `chat.py`: user's own key (encrypted, from DB) → server `ANTHROPIC_API_KEY` → 503 `NO_API_KEY`.
+
+**Key differences handled**: system prompt format, tool definition schema, tool result message roles, image/document block format, stop reason normalization.
 
 ### API layer (FastAPI)
 
@@ -56,7 +76,8 @@ api/
 └── routes/
     ├── auth.py     # POST /api/auth/register, /api/auth/login, GET /api/auth/me
     ├── chat.py     # POST /api/chat → SSE streaming; GET /api/files, /api/memory, /api/news
-    └── dashboard.py # CRUD /api/dashboard/widgets
+    ├── dashboard.py # CRUD /api/dashboard/widgets
+    └── settings.py # GET/PUT/DELETE /api/settings/llm, GET /api/settings/status
 ```
 
 **`POST /api/chat`** is the main endpoint — everything goes through conversation. The SSE stream emits `AgentEvent` objects (text_delta, tool_start, tool_result, widget_add, widget_update, done).
@@ -65,10 +86,10 @@ api/
 
 ```
 storage/
-├── database.py         # Engine, get_connection(), init_db()
-├── schema.py           # 6 tables: users, conversations, messages, analyses, user_memory, dashboard_widgets
+├── database.py         # Engine, get_connection(), init_db(), auto-migration for new columns
+├── schema.py           # 6 tables: users (incl. llm_provider, llm_api_key_enc, llm_model), conversations, messages, analyses, user_memory, dashboard_widgets
 └── repositories/       # Repository pattern for data access
-    ├── user_repo.py
+    ├── user_repo.py    # incl. set/get_user_llm_config()
     ├── chat_repo.py
     ├── file_repo.py
     └── memory_repo.py
@@ -116,8 +137,7 @@ The `add_dashboard_widget` tool (registered with user context) lets the agent cr
 frontend/src/
 ├── components/
 │   ├── Chat/
-│   │   ├── ChatDrawer.tsx     # Slide-in panel (420px right side), opens from dashboard
-│   │   ├── ChatWindow.tsx     # Standalone chat view (used inside drawer)
+│   │   ├── ChatPage.tsx       # Full-screen chat with task sidebar, setup check on mount
 │   │   ├── ChatInput.tsx      # Text input + file upload (PDF, images, CSV, Excel)
 │   │   └── MessageBubble.tsx  # Markdown rendering + expandable ToolIndicator
 │   ├── Dashboard/
@@ -129,17 +149,20 @@ frontend/src/
 │   │   ├── QuestionArea.tsx   # Inline chat input in dashboard grid
 │   │   ├── NewsArea.tsx       # Energy news from ORF RSS (GET /api/news)
 │   │   └── DocumentTable.tsx  # User files + knowledge facts + drag-and-drop upload
-│   ├── Layout/
-│   │   ├── MainLayout.tsx     # Header + Dashboard + ChatDrawer
-│   │   └── Header.tsx         # Logo, chat button, conversation selector, user menu
+│   ├── Settings/
+│   │   ├── ApiKeySetupModal.tsx  # Post-login modal when no API key configured
+│   │   └── SettingsPage.tsx      # Full settings page at /settings (change/delete key)
+│   ├── Visualization/
+│   │   ├── DashboardPage.tsx  # Route-based dashboard views (/dashboard/:view)
+│   │   └── views/             # Per-analysis views (Invoice, LoadProfile, Tariff, Battery, PV, Spot, Gas, BEG)
 │   └── Auth/                  # LoginPage, RegisterPage (design system styled)
 ├── hooks/
-│   └── useChat.ts             # SSE streaming, widget_add/widget_update event handling
+│   └── useChat.ts             # SSE streaming, widget events, 503 NO_API_KEY handling
 ├── stores/
 │   ├── chatStore.ts           # Zustand: messages, toolActivity, conversationId
 │   ├── dashboardStore.ts      # Zustand: widgets, userFiles, userMemory (reactive, SSE-updated)
 │   └── authStore.ts           # JWT token management
-└── api/client.ts              # REST helpers (auth, conversations, dashboard, files, memory, news)
+└── api/client.ts              # REST helpers (auth, conversations, dashboard, files, memory, news, settings)
 ```
 
 **Key patterns:**
@@ -155,19 +178,21 @@ frontend/src/
 ### Data flow
 
 1. User sends message via `POST /api/chat` (or clicks a TaskList item / uses QuestionArea)
-2. Agent builds system prompt enriched with user memory facts
-3. Claude decides which tools to call (invoice OCR, smart meter, tariffs, etc.)
-4. Tool results feed back to Claude → loops until final text response
-5. `add_dashboard_widget` tool calls emit `widget_add`/`widget_update` SSE events → dashboard updates live
-6. Events stream to frontend via SSE → chatStore + dashboardStore update reactively
-7. Messages and memory persisted to DB
+2. Provider resolution: user key (encrypted in DB) → server `ANTHROPIC_API_KEY` → 503
+3. Agent builds system prompt enriched with user memory facts
+4. LLM (Claude or OpenAI) decides which tools to call (invoice OCR, smart meter, tariffs, etc.)
+5. Tool results feed back to LLM → loops until final text response
+6. `add_dashboard_widget` tool calls emit `widget_add`/`widget_update` SSE events → dashboard updates live
+7. Events stream to frontend via SSE → chatStore + dashboardStore update reactively
+8. Messages and memory persisted to DB
 
 ## Key Rules
 
 - **All prices are BRUTTO** (incl. 20% Austrian VAT). E-Control API returns netto → multiply by 1.2.
 - **LLM is ONLY for language** — OCR and conversation. ALL calculations are deterministic Python.
-- **No frameworks** — no LangChain, no CrewAI. Agent loop is hand-rolled using anthropic SDK directly.
-- **Config** from `.env` via python-dotenv (see `config.py`): `ANTHROPIC_API_KEY`, `DATABASE_URL`, `SECRET_KEY`, `WIENER_NETZE_EMAIL`, `WIENER_NETZE_PASSWORD`.
+- **No frameworks** — no LangChain, no CrewAI. Agent loop is hand-rolled with a provider abstraction layer (`gridbert/llm/`).
+- **API keys encrypted at rest** — user-provided keys stored with Fernet encryption (`gridbert/crypto.py`), derived from `SECRET_KEY`.
+- **Config** from `.env` via python-dotenv (see `config.py`): `ANTHROPIC_API_KEY` (server fallback), `DATABASE_URL`, `SECRET_KEY`, `WIENER_NETZE_EMAIL`, `WIENER_NETZE_PASSWORD`.
 - **License**: AGPL-3.0-only — all source files need the SPDX header:
   ```python
   # Gridbert — Persönlicher Energie-Agent
@@ -180,7 +205,8 @@ Phase 1 (complete): Agent core + FastAPI backend + auth + chat SSE + storage.
 Phase 2 (complete): React SPA with conversational UI + adaptive dashboard.
 Phase 3 (complete): 12 tools — load profile, spot tariffs, battery/PV sim, gas, energy monitor.
 Phase 4 (complete): Multi-provider smart meter (7 providers), Docker self-hosted, Home Assistant integration.
-Phase 5 (WIP): Küchentisch-Ingenieur UI redesign — dashboard-first, live widget canvas, design system. Builds OK but needs debugging.
+Phase 5 (complete): Küchentisch-Ingenieur UI redesign — dashboard-first, live widget canvas, design system.
+Phase 6 (complete): Multi-provider LLM support (Claude + OpenAI), user-provided API keys with Fernet encryption, settings UI, setup flow.
 
 ## Docker Deployment
 
@@ -194,18 +220,19 @@ Multi-stage Dockerfile: Node frontend build → Python runtime. Frontend served 
 
 ## File Upload Flow
 
-1. Frontend `ChatInput` (in ChatDrawer) or `DocumentTable` (drag-and-drop on dashboard) accepts PDF, images, CSV, Excel
+1. Frontend `ChatInput` or `DocumentTable` (drag-and-drop) accepts PDF, images, CSV, Excel
 2. Files are base64-encoded and sent as `attachments[]` in the `/api/chat` POST body
-3. `_build_user_content()` in `loop.py` routes by media type:
-   - `application/pdf` → Claude `document` block (native PDF reading)
-   - `image/*` → Claude `image` block (Vision)
-   - CSV/Excel → `_decode_tabular_file()` decodes to text, inlined in message (50k char limit)
-4. A text hint tells Claude the files are inline — no tool call needed to read them
+3. Each LLM provider's `build_user_content()` routes by media type:
+   - **Claude**: `application/pdf` → native `document` block; `image/*` → `image` block
+   - **OpenAI**: PDF → text extraction via pdfplumber; `image/*` → `image_url` with data URI
+   - Both: CSV/Excel → `_decode_tabular_file()` decodes to text, inlined in message (50k char limit)
+4. A text hint tells the LLM the files are inline — no tool call needed to read them
 
 ## Optional Dependencies
 
 ```bash
 pip install -e ".[analysis]"   # scikit-fda, matplotlib, entsoe-py (FDA anomaly detection, visualizations, spot prices)
+pip install -e ".[openai]"     # openai SDK (OpenAI provider support)
 pip install -e ".[postgres]"   # psycopg (SaaS deployment)
 pip install -e ".[ollama]"     # ollama SDK (self-hosted LLM fallback)
 ```
