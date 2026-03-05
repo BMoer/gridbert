@@ -24,6 +24,12 @@ export async function apiFetch<T>(
   const res = await fetch(`${BASE}${path}`, { ...options, headers });
 
   if (!res.ok) {
+    // Auto-logout on 401 (expired/invalid token)
+    if (res.status === 401) {
+      localStorage.removeItem("gridbert_token");
+      window.location.href = "/login";
+      throw new ApiError(401, "Session abgelaufen");
+    }
     const body = await res.json().catch(() => ({ detail: res.statusText }));
     throw new ApiError(res.status, body.detail || "Request failed");
   }
@@ -163,4 +169,44 @@ export function getUserFiles() {
 
 export function getUserMemory() {
   return apiFetch<MemoryFact[]>("/memory");
+}
+
+// --- Settings (LLM Provider) ---
+
+export interface SetupStatus {
+  has_user_key: boolean;
+  has_server_key: boolean;
+  needs_setup: boolean;
+  provider: string;
+}
+
+export interface LLMConfig {
+  provider: string;
+  model: string;
+  has_key: boolean;
+}
+
+export interface LLMConfigInput {
+  provider: string;
+  api_key: string;
+  model: string;
+}
+
+export function getSetupStatus() {
+  return apiFetch<SetupStatus>("/settings/status");
+}
+
+export function getLLMConfig() {
+  return apiFetch<LLMConfig>("/settings/llm");
+}
+
+export function setLLMConfig(config: LLMConfigInput) {
+  return apiFetch<{ status: string }>("/settings/llm", {
+    method: "PUT",
+    body: JSON.stringify(config),
+  });
+}
+
+export function deleteLLMConfig() {
+  return apiFetch<void>("/settings/llm", { method: "DELETE" });
 }

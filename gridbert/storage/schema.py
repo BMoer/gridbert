@@ -31,6 +31,9 @@ users = Table(
     Column("name", String, default=""),
     Column("plz", String, default=""),
     Column("zaehlpunkt", String, default=""),
+    Column("llm_provider", String, default=""),  # "claude" | "openai" | ""
+    Column("llm_api_key_enc", Text, default=""),  # Fernet-encrypted API key
+    Column("llm_model", String, default=""),  # e.g. "claude-haiku-4-5-20251001", "gpt-4o"
     Column("created_at", DateTime, server_default=func.now()),
 )
 

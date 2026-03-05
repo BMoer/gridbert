@@ -2,7 +2,9 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useAuthStore } from "./stores/authStore";
 import { LoginPage } from "./components/Auth/LoginPage";
 import { RegisterPage } from "./components/Auth/RegisterPage";
-import { MainLayout } from "./components/Layout/MainLayout";
+import { ChatPage } from "./components/Chat/ChatPage";
+import { DashboardPage } from "./components/Visualization/DashboardPage";
+import { SettingsPage } from "./components/Settings/SettingsPage";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated());
@@ -40,7 +42,23 @@ export default function App() {
           path="/"
           element={
             <ProtectedRoute>
-              <MainLayout />
+              <ChatPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <ProtectedRoute>
+              <SettingsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/dashboard/:view"
+          element={
+            <ProtectedRoute>
+              <DashboardPage />
             </ProtectedRoute>
           }
         />

@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { useChatStore } from "../stores/chatStore";
 import { useDashboardStore } from "../stores/dashboardStore";
 
@@ -11,39 +11,36 @@ export interface FileAttachment {
 /** Hook that sends a message and streams the SSE response. */
 export function useChat() {
   const isLoading = useChatStore((s) => s.isLoading);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const cancelRequest = useCallback(() => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+  }, []);
 
   const sendMessage = useCallback(
     async (message: string, files?: FileAttachment[]) => {
-      // Read fresh state to avoid stale closures
       const state = useChatStore.getState();
       if (!message.trim() || state.isLoading) return;
-
-      // Debug: log what we received
-      console.log("[useChat] sendMessage", {
-        message,
-        filesReceived: files?.length ?? 0,
-        fileDetails: files?.map((f) => ({ name: f.name, type: f.type, dataLen: f.data?.length ?? 0 })),
-      });
 
       state.addUserMessage(message);
       state.setLoading(true);
       state.startAssistantMessage();
 
+      const controller = new AbortController();
+      abortRef.current = controller;
+
       try {
         const token = localStorage.getItem("gridbert_token");
 
-        // Build attachments from files
         const attachments = files?.map((f) => ({
           type: f.type.startsWith("image/") ? "image" : "document",
           media_type: f.type,
           file_name: f.name,
           data: f.data,
         }));
-
-        console.log("[useChat] sending to /api/chat", {
-          attachmentsCount: attachments?.length ?? 0,
-          bodySize: JSON.stringify({ message, conversation_id: state.conversationId, attachments: attachments?.length ? attachments : undefined }).length,
-        });
 
         const res = await fetch("/api/chat", {
           method: "POST",
@@ -56,11 +53,24 @@ export function useChat() {
             conversation_id: state.conversationId,
             attachments: attachments?.length ? attachments : undefined,
           }),
+          signal: controller.signal,
         });
 
         if (!res.ok) {
+          if (res.status === 401) {
+            localStorage.removeItem("gridbert_token");
+            window.location.href = "/login";
+            return;
+          }
           const err = await res.json().catch(() => ({ detail: "Fehler" }));
-          state.appendToAssistant(`Fehler: ${err.detail}`);
+          if (res.status === 503 && err.detail === "NO_API_KEY") {
+            state.appendToAssistant(
+              "Ich brauche einen API-Schlüssel, um dir helfen zu können. " +
+              "Bitte richte ihn unter [Einstellungen](/settings) ein.",
+            );
+          } else {
+            state.appendToAssistant(`Fehler: ${err.detail}`);
+          }
           state.finishAssistantMessage();
           state.setLoading(false);
           return;
@@ -92,22 +102,29 @@ export function useChat() {
             }
           }
         }
-      } catch {
-        useChatStore.getState().appendToAssistant("Verbindungsfehler. Bitte erneut versuchen.");
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") {
+          useChatStore.getState().appendToAssistant("Abgebrochen.");
+        } else {
+          useChatStore.getState().appendToAssistant("Verbindungsfehler. Bitte erneut versuchen.");
+        }
       } finally {
+        abortRef.current = null;
         const s = useChatStore.getState();
         s.finishAssistantMessage();
         s.setLoading(false);
       }
     },
-    [], // no deps — we use getState() for fresh values
+    [],
   );
 
-  return { sendMessage, isLoading };
+  return { sendMessage, isLoading, cancelRequest };
 }
 
 function handleEvent(event: { type: string; data: Record<string, unknown> }) {
   const store = useChatStore.getState();
+  const dashStore = useDashboardStore.getState();
+
   switch (event.type) {
     case "text_delta":
       store.appendToAssistant(event.data.text as string);
@@ -127,11 +144,20 @@ function handleEvent(event: { type: string; data: Record<string, unknown> }) {
     case "status":
       store.setStatusMessage(event.data.message as string);
       break;
-    case "widget_add":
-      useDashboardStore.getState().addWidget(event.data as unknown as import("../api/client").Widget);
+    case "widget_add": {
+      const widget = event.data as unknown as import("../api/client").Widget;
+      dashStore.addWidget(widget);
       break;
-    case "widget_update":
-      useDashboardStore.getState().updateWidget(event.data as unknown as import("../api/client").Widget);
+    }
+    case "widget_update": {
+      const widget = event.data as unknown as import("../api/client").Widget;
+      dashStore.updateWidget(widget);
+      break;
+    }
+    case "error":
+      store.appendToAssistant(
+        `Fehler: ${(event.data.message as string) || "Unbekannter Fehler"}`,
+      );
       break;
     case "done":
       if (event.data.conversation_id) {
@@ -140,8 +166,7 @@ function handleEvent(event: { type: string; data: Record<string, unknown> }) {
       if (event.data.suggestions) {
         store.setSuggestions(event.data.suggestions as string[]);
       }
-      // Refresh files and memory after conversation (may have changed)
-      useDashboardStore.getState().refreshContext();
+      dashStore.refreshContext();
       break;
   }
 }

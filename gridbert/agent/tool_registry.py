@@ -77,12 +77,14 @@ class ToolRegistry:
 def build_default_registry(
     user_id: int | None = None,
     db_conn: Any | None = None,
+    llm_provider: Any | None = None,
 ) -> ToolRegistry:
     """Erstelle Registry mit allen Gridbert-Tools.
 
     Args:
         user_id: Aktueller User (für Memory-Tool).
         db_conn: SQLAlchemy Connection (für Memory-Tool).
+        llm_provider: LLMProvider instance for tools that need LLM access.
     """
     registry = ToolRegistry()
 
@@ -106,7 +108,7 @@ def build_default_registry(
             },
             "required": ["file_path"],
         },
-        handler=parse_invoice,
+        handler=lambda file_path: parse_invoice(file_path, llm_provider=llm_provider),
     )
 
     # --- Smart Meter (Multi-Provider) -----------------------------------------
@@ -257,6 +259,66 @@ def build_default_registry(
 
     # --- Load Profile Analysis ------------------------------------------------
     from gridbert.tools.load_profile import analyze_load_profile
+    from gridbert.storage.repositories.file_repo import read_file_content as _read_file_content
+
+    # Shared state: last analysis visualizations (auto-injected into widgets)
+    _last_analysis_visuals: dict[str, str] = {}
+
+    def _analyze_load_profile_handler(
+        file_id: int = 0,
+        csv_text: str = "",
+        consumption_data: list[dict] | None = None,
+        price_per_kwh: float = 0.20,
+    ):
+        """Wrapper that resolves file_id to actual file content before analysis."""
+        # file_id takes priority — reads full file from disk (no truncation)
+        if file_id and not csv_text:
+            result = _read_file_content(db_conn, user_id, file_id)
+            if result is not None:
+                raw_bytes, file_meta = result
+                file_name = file_meta["file_name"]
+                media_type = file_meta["media_type"]
+                if file_name.endswith((".xlsx", ".xls")) or media_type in (
+                    "application/vnd.ms-excel",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                ):
+                    import pandas as pd
+                    df = pd.read_excel(_io.BytesIO(raw_bytes))
+                    csv_text = df.to_csv(index=False)
+                else:
+                    for encoding in ("utf-8", "utf-8-sig", "latin-1", "cp1252"):
+                        try:
+                            csv_text = raw_bytes.decode(encoding)
+                            break
+                        except UnicodeDecodeError:
+                            continue
+                    else:
+                        csv_text = raw_bytes.decode("utf-8", errors="replace")
+
+        analysis_result = analyze_load_profile(
+            consumption_data=consumption_data,
+            csv_text=csv_text,
+            price_per_kwh=price_per_kwh,
+        )
+
+        # Store visualizations for auto-injection into consumption_chart widget
+        _last_analysis_visuals.clear()
+        if isinstance(analysis_result, str):
+            # Tool returned JSON string — parse and extract visuals
+            try:
+                import json
+                parsed = json.loads(analysis_result)
+                vis = parsed.get("visualisierungen", {})
+                if vis:
+                    _last_analysis_visuals.update(vis)
+            except Exception:
+                pass
+        elif hasattr(analysis_result, "visualisierungen"):
+            _last_analysis_visuals.update(analysis_result.visualisierungen or {})
+
+        return analysis_result
+
+    import io as _io
 
     registry.register(
         name="analyze_load_profile",
@@ -265,28 +327,31 @@ def build_default_registry(
             "Visualisierungen (Heatmap, Jahresdauerlinie, Monatsverbrauch). "
             "Berechnet Grundlast, Spitzenlast, Volllaststunden, erkennt Anomalien "
             "und schätzt Einsparpotenziale. "
-            "Funktioniert mit hochgeladenen CSV/Excel-Dateien UND Smart-Meter-Daten. "
-            "Kein Smart-Meter-Zugang nötig wenn der User eine Datei hochgeladen hat! "
-            "WICHTIG: Übergib hochgeladene CSV/Excel-Daten IMMER als csv_text. "
-            "Kopiere den GESAMTEN Dateiinhalt 1:1 in csv_text. "
-            "Verwende NIEMALS consumption_data für hochgeladene Dateien."
+            "BEVORZUGT: Nutze file_id um eine gespeicherte CSV/Excel-Datei direkt zu analysieren. "
+            "Die Datei-IDs stehen im System-Prompt unter 'Gespeicherte Dateien'. "
+            "Kein Smart-Meter-Zugang nötig wenn der User eine Datei hochgeladen hat!"
         ),
         input_schema={
             "type": "object",
             "properties": {
+                "file_id": {
+                    "type": "integer",
+                    "description": (
+                        "ID einer gespeicherten CSV/Excel-Datei (BEVORZUGT). "
+                        "Liest die Datei direkt und vollständig — kein Kopieren nötig."
+                    ),
+                },
                 "csv_text": {
                     "type": "string",
                     "description": (
-                        "Der GESAMTE CSV-Text der hochgeladenen Datei — 1:1 kopieren, "
-                        "NICHT umformatieren oder in ein Array konvertieren. "
+                        "CSV-Text als Fallback falls keine file_id verfügbar. "
                         "Spalten werden automatisch erkannt."
                     ),
                 },
                 "consumption_data": {
                     "type": "array",
                     "description": (
-                        "NUR für bereits strukturierte Daten aus anderen Tools (z.B. Smart Meter). "
-                        "NIEMALS für vom User hochgeladene Dateien verwenden — dafür csv_text nutzen."
+                        "NUR für bereits strukturierte Daten aus anderen Tools (z.B. Smart Meter)."
                     ),
                     "items": {
                         "type": "object",
@@ -303,7 +368,7 @@ def build_default_registry(
                 },
             },
         },
-        handler=analyze_load_profile,
+        handler=_analyze_load_profile_handler,
     )
 
     # --- Spot Tariff Analysis -------------------------------------------------
@@ -608,6 +673,18 @@ def build_default_registry(
         ) -> str:
             """Insert or update a dashboard widget for this user."""
             cfg = config or {}
+
+            # Auto-inject base64 visualizations for consumption_chart
+            # (Claude can't copy huge base64 strings — we inject them server-side)
+            if widget_type == "consumption_chart" and _last_analysis_visuals:
+                vis_map = {
+                    "heatmap": "heatmap_base64",
+                    "jahresdauerlinie": "duration_curve_base64",
+                    "monatsverbrauch": "monthly_chart_base64",
+                }
+                for vis_key, cfg_key in vis_map.items():
+                    if cfg_key not in cfg and vis_key in _last_analysis_visuals:
+                        cfg[cfg_key] = _last_analysis_visuals[vis_key]
             # Check if widget of same type already exists → update
             existing = db_conn.execute(
                 dashboard_widgets.select().where(
@@ -655,8 +732,12 @@ def build_default_registry(
                 "Nutze dies um dem User Ergebnisse visuell darzustellen — "
                 "KPIs, Charts, Tarifvergleiche, Einspar-Übersichten. "
                 "Das Widget erscheint sofort auf dem Dashboard während du sprichst. "
-                "Widget-Typen: savings_summary, tariff_comparison, consumption_chart, "
-                "consumption_kpi, spot_price, battery_sim, pv_sim."
+                "WICHTIG: Rufe dieses Tool IMMER nach einer Analyse auf, um die Ergebnisse zu visualisieren. "
+                "Widget-Typen: invoice_summary (Rechnungsdaten: lieferant, tarif, energiepreis, "
+                "grundgebuehr, jahresverbrauch, plz, zaehlpunkt, rechnungsbetrag, zeitraum), "
+                "savings_summary, tariff_comparison, consumption_chart, "
+                "consumption_kpi, spot_price, battery_sim, pv_sim, "
+                "gas_comparison, beg_comparison."
             ),
             input_schema={
                 "type": "object",
@@ -664,9 +745,10 @@ def build_default_registry(
                     "widget_type": {
                         "type": "string",
                         "description": (
-                            "Art des Widgets: savings_summary, tariff_comparison, "
-                            "consumption_chart, consumption_kpi, spot_price, "
-                            "battery_sim, pv_sim"
+                            "Art des Widgets: invoice_summary, savings_summary, "
+                            "tariff_comparison, consumption_chart, consumption_kpi, "
+                            "spot_price, battery_sim, pv_sim, gas_comparison, "
+                            "beg_comparison"
                         ),
                     },
                     "config": {

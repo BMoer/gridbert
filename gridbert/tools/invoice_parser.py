@@ -10,6 +10,7 @@ import io
 import json
 import logging
 from pathlib import Path
+from typing import Any
 
 import pdfplumber
 
@@ -106,48 +107,39 @@ def _parse_json_response(text: str) -> dict:
     raise ValueError(f"Konnte kein JSON aus LLM-Antwort extrahieren: {text[:200]}")
 
 
-# --- Claude Vision API --------------------------------------------------------
+# --- LLM-based extraction (Claude or OpenAI via LLMProvider) ------------------
 
-def _extract_via_claude(text: str = "", image_b64: str = "") -> dict:
-    """Extrahiere Rechnungsdaten via Claude API (Text oder Vision)."""
-    import anthropic
+def _extract_via_llm(
+    llm_provider: Any = None,
+    text: str = "",
+    image_b64: str = "",
+) -> dict:
+    """Extrahiere Rechnungsdaten via LLM Provider (Claude Vision, OpenAI, etc.)."""
+    if llm_provider is None:
+        # Fallback: create Claude provider from server config
+        from gridbert.config import CLAUDE_MODEL
+        from gridbert.llm import create_provider
 
-    from gridbert.config import CLAUDE_MODEL
-
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        llm_provider = create_provider("claude", ANTHROPIC_API_KEY, CLAUDE_MODEL)
 
     if image_b64:
-        # Vision: Bild senden
-        content: list[dict] = [
-            {
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": "image/png",
-                    "data": image_b64,
-                },
-            },
-            {"type": "text", "text": EXTRACTION_PROMPT},
-        ]
+        attachments = [{"media_type": "image/png", "data": image_b64, "file_name": "rechnung.png"}]
+        user_content = llm_provider.build_user_content(EXTRACTION_PROMPT, attachments)
     else:
-        # Text: Rechnungstext senden
-        content = [
-            {
-                "type": "text",
-                "text": (
-                    f"Hier ist der Text einer österreichischen Stromrechnung:\n\n"
-                    f"{text}\n\n{EXTRACTION_PROMPT}"
-                ),
-            },
-        ]
+        prompt = (
+            f"Hier ist der Text einer österreichischen Stromrechnung:\n\n"
+            f"{text}\n\n{EXTRACTION_PROMPT}"
+        )
+        user_content = prompt
 
-    response = client.messages.create(
-        model=CLAUDE_MODEL,
-        messages=[{"role": "user", "content": content}],
+    response = llm_provider.chat(
+        system="Du bist ein Experte für österreichische Stromrechnungen.",
+        messages=[{"role": "user", "content": user_content}],
+        tools=[],
         max_tokens=1024,
     )
 
-    response_text = response.content[0].text
+    response_text = "\n".join(response.text_parts)
     return _parse_json_response(response_text)
 
 
@@ -191,18 +183,23 @@ def _extract_via_ollama(text: str = "", image_b64: str = "") -> dict:
 
 # --- Haupt-Funktion -----------------------------------------------------------
 
-def parse_invoice(file_path: str | Path) -> Invoice:
+def parse_invoice(file_path: str | Path, llm_provider: Any = None) -> Invoice:
     """Extrahiere Rechnungsdaten aus PDF oder Bild.
 
-    Nutzt Claude API wenn ANTHROPIC_API_KEY gesetzt, sonst Ollama.
+    Uses the provided LLM provider, falls back to Claude API or Ollama.
     """
     path = Path(file_path)
     if not path.exists():
         raise FileNotFoundError(f"Datei nicht gefunden: {path}")
 
-    use_claude = bool(ANTHROPIC_API_KEY)
-    extract_fn = _extract_via_claude if use_claude else _extract_via_ollama
-    backend_name = "Claude" if use_claude else "Ollama"
+    # Determine extraction backend
+    if llm_provider is not None or ANTHROPIC_API_KEY:
+        def extract_fn(text: str = "", image_b64: str = "") -> dict:
+            return _extract_via_llm(llm_provider=llm_provider, text=text, image_b64=image_b64)
+        backend_name = llm_provider.provider_name if llm_provider else "Claude"
+    else:
+        extract_fn = _extract_via_ollama
+        backend_name = "Ollama"
 
     if path.suffix.lower() == ".pdf":
         text = _pdf_to_text(path)

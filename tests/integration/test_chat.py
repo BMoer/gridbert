@@ -77,33 +77,33 @@ class TestChatEndpoint:
 
 class TestHistoryConversion:
     def test_converts_user_and_assistant(self):
-        from gridbert.api.routes.chat import _history_to_claude_messages
+        from gridbert.api.routes.chat import _history_to_messages
 
         history = [
             {"role": "user", "content": "Hallo"},
             {"role": "assistant", "content": "Hi!"},
             {"role": "user", "content": "Wie geht's?"},
         ]
-        result = _history_to_claude_messages(history)
+        result = _history_to_messages(history)
         assert len(result) == 3
         assert result[0] == {"role": "user", "content": "Hallo"}
         assert result[1] == {"role": "assistant", "content": "Hi!"}
 
     def test_skips_non_user_assistant(self):
-        from gridbert.api.routes.chat import _history_to_claude_messages
+        from gridbert.api.routes.chat import _history_to_messages
 
         history = [
             {"role": "user", "content": "Test"},
             {"role": "tool_result", "content": "..."},
             {"role": "assistant", "content": "Done"},
         ]
-        result = _history_to_claude_messages(history)
+        result = _history_to_messages(history)
         assert len(result) == 2
 
     def test_empty_history(self):
-        from gridbert.api.routes.chat import _history_to_claude_messages
+        from gridbert.api.routes.chat import _history_to_messages
 
-        assert _history_to_claude_messages([]) == []
+        assert _history_to_messages([]) == []
 
 
 class TestConversations:

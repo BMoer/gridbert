@@ -51,10 +51,12 @@ def create_app() -> FastAPI:
     from gridbert.api.routes.auth import router as auth_router
     from gridbert.api.routes.chat import router as chat_router
     from gridbert.api.routes.dashboard import router as dashboard_router
+    from gridbert.api.routes.settings import router as settings_router
 
     app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
     app.include_router(chat_router, prefix="/api", tags=["chat"])
     app.include_router(dashboard_router, prefix="/api/dashboard", tags=["dashboard"])
+    app.include_router(settings_router, prefix="/api/settings", tags=["settings"])
 
     @app.get("/api/health")
     def health():

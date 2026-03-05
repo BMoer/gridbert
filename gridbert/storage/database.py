@@ -46,4 +46,26 @@ def init_db() -> None:
     from gridbert.storage.schema import metadata
 
     metadata.create_all(_engine)
+    _migrate_add_llm_columns(_engine)
     log.info("Datenbank initialisiert: %s", DATABASE_URL)
+
+
+def _migrate_add_llm_columns(engine) -> None:
+    """Add LLM provider columns to users table if missing (for existing DBs)."""
+    import sqlalchemy
+
+    inspector = sqlalchemy.inspect(engine)
+    existing = {col["name"] for col in inspector.get_columns("users")}
+    migrations = [
+        ("llm_provider", "VARCHAR", "''"),
+        ("llm_api_key_enc", "TEXT", "''"),
+        ("llm_model", "VARCHAR", "''"),
+    ]
+    with engine.connect() as conn:
+        for col_name, col_type, default in migrations:
+            if col_name not in existing:
+                conn.execute(sqlalchemy.text(
+                    f"ALTER TABLE users ADD COLUMN {col_name} {col_type} DEFAULT {default}"
+                ))
+                log.info("Migration: Added column users.%s", col_name)
+        conn.commit()

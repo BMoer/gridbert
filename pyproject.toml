@@ -39,6 +39,8 @@ dependencies = [
 [project.optional-dependencies]
 # PostgreSQL für SaaS-Deployment
 postgres = ["psycopg[binary]>=3.1"]
+# OpenAI Provider
+openai = ["openai>=1.50"]
 # Legacy Ollama für Self-Hosted
 ollama = ["ollama>=0.4"]
 # Phase 3: Erweiterte Analyse-Tools

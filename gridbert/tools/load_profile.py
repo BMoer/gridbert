@@ -234,7 +234,10 @@ def _find_column(
 def _prepare_dataframe(data: list[dict]) -> pd.DataFrame:
     """Rohdaten zu DataFrame mit DatetimeIndex und consumption_kw konvertieren."""
     df = pd.DataFrame(data)
-    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    # utc=True handles mixed timezone offsets (e.g. CET/CEST from Austrian smart meter data)
+    df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
+    # Convert to Europe/Vienna for correct hour-of-day analysis, then drop tz for downstream compat
+    df["timestamp"] = df["timestamp"].dt.tz_convert("Europe/Vienna").dt.tz_localize(None)
     df = df.set_index("timestamp").sort_index()
 
     # kWh → kW (15-min Intervall)

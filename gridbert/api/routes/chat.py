@@ -19,7 +19,8 @@ from gridbert.agent.loop import GridbertAgent
 from gridbert.agent.tool_registry import build_default_registry
 from gridbert.agent.types import AgentEvent, EventType
 from gridbert.api.deps import CurrentUserId, DbConn
-from gridbert.config import ANTHROPIC_API_KEY
+from gridbert.config import ANTHROPIC_API_KEY, CLAUDE_MODEL
+from gridbert.llm import create_provider
 from gridbert.storage.repositories.chat_repo import (
     add_message,
     create_conversation,
@@ -57,11 +58,26 @@ def chat(
     conn: DbConn,
 ) -> StreamingResponse:
     """Chat mit Gridbert — SSE Stream."""
-    if not ANTHROPIC_API_KEY:
+    from gridbert.crypto import decrypt_value
+    from gridbert.storage.repositories.user_repo import get_user_llm_config
+
+    # Resolve LLM provider: user key > server key > error
+    llm_config = get_user_llm_config(conn, user_id)
+    if llm_config["api_key_enc"]:
+        api_key = decrypt_value(llm_config["api_key_enc"])
+        provider_name = llm_config["provider"] or "claude"
+        model = llm_config["model"] or (CLAUDE_MODEL if provider_name == "claude" else "gpt-4o")
+    elif ANTHROPIC_API_KEY:
+        api_key = ANTHROPIC_API_KEY
+        provider_name = "claude"
+        model = CLAUDE_MODEL
+    else:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="ANTHROPIC_API_KEY nicht konfiguriert",
+            detail="NO_API_KEY",
         )
+
+    llm_provider = create_provider(provider_name, api_key, model)
 
     log.info("Chat request: message=%r, conv=%s, attachments=%d",
              req.message[:50], req.conversation_id,
@@ -90,7 +106,7 @@ def chat(
 
     # Bisherige Messages laden und zu Claude API Format konvertieren
     history = get_messages(conn, conversation_id, limit=50)
-    claude_messages = _history_to_claude_messages(history)
+    claude_messages = _history_to_messages(history)
 
     # User-Memory und gespeicherte Dateien laden
     memories = get_user_memories(conn, user_id)
@@ -100,9 +116,10 @@ def chat(
     conn.commit()
 
     # Agent bauen — mit User-Kontext für Memory-Tool und Datei-Zugriff
-    registry = build_default_registry(user_id=user_id, db_conn=conn)
+    registry = build_default_registry(user_id=user_id, db_conn=conn, llm_provider=llm_provider)
     agent = GridbertAgent(
         tool_registry=registry,
+        llm_provider=llm_provider,
         user_memory=memories,
         user_files=user_files,
     )
@@ -245,7 +262,7 @@ def list_user_memory(
     return get_user_memories(conn, user_id)
 
 
-def _history_to_claude_messages(history: list[dict]) -> list[dict[str, Any]]:
+def _history_to_messages(history: list[dict]) -> list[dict[str, Any]]:
     """DB-Messages in Claude API Format konvertieren."""
     claude_messages: list[dict[str, Any]] = []
     for msg in history:

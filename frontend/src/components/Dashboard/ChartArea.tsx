@@ -10,93 +10,124 @@ interface MonthlyDataPoint {
   previous?: number;
 }
 
+/** Short German month labels. */
+const MONTH_LABELS: Record<string, string> = {
+  "01": "Jan", "02": "Feb", "03": "Mär", "04": "Apr",
+  "05": "Mai", "06": "Jun", "07": "Jul", "08": "Aug",
+  "09": "Sep", "10": "Okt", "11": "Nov", "12": "Dez",
+};
+
+function monthLabel(key: string): string {
+  const mm = key.split("-")[1];
+  return mm ? (MONTH_LABELS[mm] ?? key) : key;
+}
+
 export function ChartArea({ widget }: Props) {
   const rawData = widget.config.monthly_data as MonthlyDataPoint[] | undefined;
   const title = (widget.config.title as string) || "Verbrauch letzte 12 Monate";
+  const monthlyImg = widget.config.monthly_chart_base64 as string | undefined;
 
-  // If widget has actual monthly data, render it dynamically
-  if (rawData && rawData.length > 0) {
-    return <DataChart title={title} data={rawData} />;
+  // Priority 1: matplotlib PNG
+  if (monthlyImg) {
+    const src = monthlyImg.startsWith("data:") ? monthlyImg : `data:image/png;base64,${monthlyImg}`;
+    return (
+      <div className="card" style={{ padding: "1.25rem", minHeight: 220, display: "flex", flexDirection: "column" }}>
+        <div style={{ fontFamily: "var(--font-display)", fontSize: "1rem", fontWeight: 500, marginBottom: "1rem", color: "var(--ink)" }}>
+          {title}
+        </div>
+        <img src={src} alt={title} style={{ width: "100%", borderRadius: "var(--radius-sm)" }} />
+      </div>
+    );
   }
 
-  // Fallback: placeholder sketch chart
+  // Priority 2: SVG bar chart from data
+  if (rawData && rawData.length > 0) {
+    return <BarChart title={title} data={rawData} />;
+  }
+
+  // Fallback: placeholder
   return <PlaceholderChart title={title} />;
 }
 
-function DataChart({ title, data }: { title: string; data: MonthlyDataPoint[] }) {
-  const maxVal = Math.max(...data.map((d) => Math.max(d.value, d.previous ?? 0)));
+function BarChart({ title, data }: { title: string; data: MonthlyDataPoint[] }) {
+  const maxVal = Math.max(...data.map((d) => d.value));
   const yMax = Math.ceil(maxVal / 100) * 100 || 400;
-  const hasPrevious = data.some((d) => d.previous !== undefined);
 
-  const chartLeft = 50;
+  const chartLeft = 55;
   const chartRight = 430;
   const chartTop = 15;
-  const chartBottom = 140;
+  const chartBottom = 145;
   const chartWidth = chartRight - chartLeft;
   const chartHeight = chartBottom - chartTop;
+  const barGap = 4;
+  const barWidth = (chartWidth - barGap * data.length) / data.length;
 
-  function toX(i: number): number {
-    return chartLeft + (i / (data.length - 1)) * chartWidth;
-  }
   function toY(val: number): number {
     return chartBottom - (val / yMax) * chartHeight;
   }
-
-  function buildPath(values: number[]): string {
-    return values
-      .map((v, i) => `${i === 0 ? "M" : "L"}${toX(i).toFixed(1)},${toY(v).toFixed(1)}`)
-      .join(" ");
-  }
-
-  const currentPath = buildPath(data.map((d) => d.value));
-  const previousPath = hasPrevious ? buildPath(data.map((d) => d.previous ?? 0)) : null;
 
   // Y-axis labels
   const ySteps = [0, Math.round(yMax / 2), yMax];
 
   return (
-    <div className="card" style={{ gridArea: "chart", padding: "1.25rem", minHeight: 220, display: "flex", flexDirection: "column" }}>
+    <div className="card" style={{ padding: "1.25rem", minHeight: 220, display: "flex", flexDirection: "column" }}>
       <div style={{ fontFamily: "var(--font-display)", fontSize: "1rem", fontWeight: 500, marginBottom: "1rem", color: "var(--ink)" }}>
         {title}
       </div>
       <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
-        <svg viewBox="0 0 440 165" preserveAspectRatio="none" style={{ width: "100%", height: "100%" }}>
+        <svg viewBox="0 0 440 170" preserveAspectRatio="xMidYMid meet" style={{ width: "100%", height: "100%" }}>
           {/* Grid */}
-          <line x1={chartLeft} y1={chartTop} x2={chartLeft} y2={chartBottom} stroke="#A89B8C" strokeWidth="0.5" strokeDasharray="2,4" />
+          <line x1={chartLeft} y1={chartTop} x2={chartLeft} y2={chartBottom} stroke="#A89B8C" strokeWidth="0.5" />
           <line x1={chartLeft} y1={chartBottom} x2={chartRight} y2={chartBottom} stroke="#A89B8C" strokeWidth="0.5" />
           {ySteps.map((v) => (
             <g key={v}>
               {v > 0 && <line x1={chartLeft} y1={toY(v)} x2={chartRight} y2={toY(v)} stroke="#A89B8C" strokeWidth="0.3" strokeDasharray="4,6" />}
-              <text x={chartLeft - 5} y={toY(v) + 4} fontFamily="var(--font-mono)" fontSize="10" fill="#A89B8C" textAnchor="end">{v}</text>
+              <text x={chartLeft - 5} y={toY(v) + 4} fontFamily="var(--font-mono)" fontSize="9" fill="#A89B8C" textAnchor="end">{v}</text>
             </g>
           ))}
-          {/* X-axis labels */}
-          {data.map((d, i) => (
-            i % Math.max(1, Math.floor(data.length / 6)) === 0 ? (
-              <text key={i} x={toX(i)} y={chartBottom + 14} fontFamily="var(--font-mono)" fontSize="9" fill="#A89B8C" textAnchor="middle">
-                {d.month}
-              </text>
-            ) : null
-          ))}
-          {/* Previous year line */}
-          {previousPath && (
-            <path d={previousPath} fill="none" stroke="#3B7DD8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.7">
-              <animate attributeName="stroke-dasharray" from="0,2000" to="2000,0" dur="1.2s" fill="freeze" />
-            </path>
-          )}
-          {/* Current line */}
-          <path d={currentPath} fill="none" stroke="#C4654A" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <animate attributeName="stroke-dasharray" from="0,2000" to="2000,0" dur="1.4s" fill="freeze" />
-          </path>
-          {/* Legend */}
-          {hasPrevious && (
-            <>
-              <line x1="300" y1="8" x2="320" y2="8" stroke="#3B7DD8" strokeWidth="2" />
-              <text x="324" y="11" fontFamily="var(--font-mono)" fontSize="9" fill="#A89B8C">Vorjahr</text>
-            </>
-          )}
-          <line x1={hasPrevious ? 370 : 300} y1="8" x2={hasPrevious ? 390 : 320} y2="8" stroke="#C4654A" strokeWidth="2" />
-          <text x={hasPrevious ? 394 : 324} y="11" fontFamily="var(--font-mono)" fontSize="9" fill="#A89B8C">Aktuell</text>
+
+          {/* Bars */}
+          {data.map((d, i) => {
+            const x = chartLeft + barGap / 2 + i * (barWidth + barGap);
+            const h = (d.value / yMax) * chartHeight;
+            const y = chartBottom - h;
+            return (
+              <g key={i}>
+                <rect x={x} y={y} width={barWidth} height={h} fill="#C4654A" rx="2" opacity="0.85">
+                  <animate attributeName="height" from="0" to={h} dur="0.6s" fill="freeze" />
+                  <animate attributeName="y" from={chartBottom} to={y} dur="0.6s" fill="freeze" />
+                </rect>
+                {/* Value label on top */}
+                {barWidth > 20 && (
+                  <text
+                    x={x + barWidth / 2}
+                    y={y - 3}
+                    fontFamily="var(--font-mono)"
+                    fontSize="7"
+                    fill="var(--ink)"
+                    textAnchor="middle"
+                    opacity="0.7"
+                  >
+                    {Math.round(d.value)}
+                  </text>
+                )}
+                {/* Month label */}
+                <text
+                  x={x + barWidth / 2}
+                  y={chartBottom + 12}
+                  fontFamily="var(--font-mono)"
+                  fontSize="8"
+                  fill="#A89B8C"
+                  textAnchor="middle"
+                >
+                  {monthLabel(d.month)}
+                </text>
+              </g>
+            );
+          })}
+
+          {/* Y-axis unit */}
+          <text x={chartLeft - 5} y={8} fontFamily="var(--font-mono)" fontSize="8" fill="#A89B8C" textAnchor="end">kWh</text>
         </svg>
       </div>
     </div>
@@ -105,7 +136,7 @@ function DataChart({ title, data }: { title: string; data: MonthlyDataPoint[] })
 
 function PlaceholderChart({ title }: { title: string }) {
   return (
-    <div className="card" style={{ gridArea: "chart", padding: "1.25rem", minHeight: 220, display: "flex", flexDirection: "column" }}>
+    <div className="card" style={{ padding: "1.25rem", minHeight: 220, display: "flex", flexDirection: "column" }}>
       <div style={{ fontFamily: "var(--font-display)", fontSize: "1rem", fontWeight: 500, marginBottom: "1rem", color: "var(--ink)" }}>
         {title}
       </div>

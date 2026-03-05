@@ -3,6 +3,27 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { ChatMessage, ToolActivity } from "../../stores/chatStore";
 
+/** Small inline Gridbert avatar for assistant messages. */
+function ChatAvatar() {
+  return (
+    <svg
+      width="32"
+      height="32"
+      viewBox="0 0 32 32"
+      fill="none"
+      style={{ flexShrink: 0, marginTop: "0.15rem" }}
+    >
+      <rect x="4" y="4" width="24" height="24" rx="6" stroke="var(--ink)" strokeWidth="1.5" fill="var(--kreide)" />
+      <circle cx="12" cy="15" r="3.5" stroke="var(--ink)" strokeWidth="1" fill="none" />
+      <circle cx="20" cy="15" r="3.5" stroke="var(--ink)" strokeWidth="1" fill="none" />
+      <circle cx="12" cy="14.5" r="1.2" fill="var(--ink)" />
+      <circle cx="20" cy="14.5" r="1.2" fill="var(--ink)" />
+      <path d="M13,21 Q16,24 19,21" stroke="var(--ink)" strokeWidth="1" fill="none" strokeLinecap="round" />
+      <path d="M15.5,14.5 Q16,13 16.5,14.5" stroke="var(--ink)" strokeWidth="0.8" fill="none" />
+    </svg>
+  );
+}
+
 interface Props {
   message: ChatMessage;
   onSuggestionClick?: (text: string) => void;
@@ -14,7 +35,9 @@ export function MessageBubble({ message, onSuggestionClick }: Props) {
   const hasRunningTools = message.toolActivity?.some((a) => a.status === "running") ?? false;
 
   return (
-    <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+    <div className={`flex ${isUser ? "justify-end" : "justify-start"}`} style={{ gap: "0.5rem" }}>
+      {/* Gridbert avatar on assistant messages */}
+      {!isUser && <ChatAvatar />}
       <div
         className="max-w-[80%] rounded-2xl px-4 py-3"
         style={

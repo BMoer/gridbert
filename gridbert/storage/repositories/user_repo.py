@@ -40,3 +40,35 @@ def update_user(conn: Connection, user_id: int, **fields: str) -> None:
     updates = {k: v for k, v in fields.items() if k in allowed and v}
     if updates:
         conn.execute(users.update().where(users.c.id == user_id).values(**updates))
+
+
+def set_user_llm_config(
+    conn: Connection,
+    user_id: int,
+    provider: str,
+    api_key_enc: str,
+    model: str,
+) -> None:
+    """Store encrypted LLM configuration for a user."""
+    conn.execute(
+        users.update().where(users.c.id == user_id).values(
+            llm_provider=provider,
+            llm_api_key_enc=api_key_enc,
+            llm_model=model,
+        )
+    )
+
+
+def get_user_llm_config(conn: Connection, user_id: int) -> dict[str, str]:
+    """Load LLM config. Returns provider, api_key_enc, model (all empty if not set)."""
+    row = conn.execute(
+        select(users.c.llm_provider, users.c.llm_api_key_enc, users.c.llm_model)
+        .where(users.c.id == user_id)
+    ).mappings().first()
+    if row is None:
+        return {"provider": "", "api_key_enc": "", "model": ""}
+    return {
+        "provider": row["llm_provider"] or "",
+        "api_key_enc": row["llm_api_key_enc"] or "",
+        "model": row["llm_model"] or "",
+    }
