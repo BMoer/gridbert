@@ -204,6 +204,47 @@ def list_messages(
     return get_messages(conn, conversation_id)
 
 
+@router.get("/news")
+def list_energy_news() -> list[dict[str, Any]]:
+    """Energie-relevante Nachrichten von ORF & Co. laden."""
+    from gridbert.tools.energy_monitor import _fetch_energy_news
+
+    try:
+        items = _fetch_energy_news()
+        return [
+            {
+                "titel": item.titel,
+                "zusammenfassung": item.zusammenfassung,
+                "quelle": item.quelle,
+                "url": item.url,
+                "datum": item.datum.isoformat() if item.datum else None,
+                "kategorie": item.kategorie,
+            }
+            for item in items
+        ]
+    except Exception:
+        log.exception("Fehler beim Laden der Energie-News")
+        return []
+
+
+@router.get("/files")
+def list_user_files(
+    user_id: CurrentUserId,
+    conn: DbConn,
+) -> list[dict[str, Any]]:
+    """Alle gespeicherten Dateien eines Users laden."""
+    return get_user_files(conn, user_id)
+
+
+@router.get("/memory")
+def list_user_memory(
+    user_id: CurrentUserId,
+    conn: DbConn,
+) -> list[dict[str, Any]]:
+    """Alle gespeicherten Fakten eines Users laden."""
+    return get_user_memories(conn, user_id)
+
+
 def _history_to_claude_messages(history: list[dict]) -> list[dict[str, Any]]:
     """DB-Messages in Claude API Format konvertieren."""
     claude_messages: list[dict[str, Any]] = []

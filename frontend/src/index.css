@@ -1,26 +1,150 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
-@theme {
-  --color-gridbert-50: #f0fdf4;
-  --color-gridbert-100: #dcfce7;
-  --color-gridbert-200: #bbf7d0;
-  --color-gridbert-300: #86efac;
-  --color-gridbert-400: #4ade80;
-  --color-gridbert-500: #22c55e;
-  --color-gridbert-600: #16a34a;
-  --color-gridbert-700: #15803d;
-  --color-gridbert-800: #166534;
-  --color-gridbert-900: #14532d;
+/* === GRIDBERT DESIGN SYSTEM TOKENS === */
+:root {
+  /* Küchentisch-Basis */
+  --bone:        #E8E0D4;
+  --ink:         #2C2C2C;
+  --terracotta:  #C4654A;
+
+  /* Energie-Farben (funktional) */
+  --strom-blau:  #3B7DD8;
+  --solar-gelb:  #E8B931;
+  --gruen:       #4A8B6E;
+
+  /* Neutrals */
+  --warm-grau:   #A89B8C;
+  --kreide:      #F5F1EB;
+
+  /* Funktional */
+  --warnung:     #D4842A;
+  --fehler:      #B83A3A;
+  --info:        #5B8FA8;
+
+  /* Typography */
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body:    'Source Serif 4', Charter, serif;
+  --font-mono:    'JetBrains Mono', Menlo, monospace;
+
+  /* Shadows */
+  --shadow-card:     0 1px 3px rgba(44,44,44,0.08), 0 4px 12px rgba(44,44,44,0.06);
+  --shadow-raised:   0 2px 8px rgba(44,44,44,0.10), 0 8px 24px rgba(44,44,44,0.08);
+  --shadow-floating: 0 4px 16px rgba(44,44,44,0.12), 0 16px 48px rgba(44,44,44,0.10);
+  --shadow-inset:    inset 0 1px 3px rgba(44,44,44,0.10);
+
+  /* Radii */
+  --radius-sm:   4px;
+  --radius-md:   8px;
+  --radius-lg:   16px;
+  --radius-full: 9999px;
 }
 
+/* === BASE === */
+*, *::before, *::after { box-sizing: border-box; }
+
 body {
-  margin: 0;
+  font-family: var(--font-body);
+  color: var(--ink);
+  background: var(--bone);
   min-height: 100vh;
+  margin: 0;
+  overflow-x: hidden;
+  /* Paper texture via noise */
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
 }
 
 #root {
   min-height: 100vh;
-  display: flex;
-  flex-direction: column;
+}
+
+/* === REUSABLE CARD === */
+.card {
+  background: var(--kreide);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  padding: 1.25rem;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+  position: relative;
+  animation: fadeInUp 0.5s ease-out backwards;
+}
+
+.card:hover {
+  box-shadow: var(--shadow-raised);
+  transform: translateY(-2px);
+}
+
+/* Stagger animations */
+.card:nth-child(1) { animation-delay: 0.05s; }
+.card:nth-child(2) { animation-delay: 0.12s; }
+.card:nth-child(3) { animation-delay: 0.19s; }
+.card:nth-child(4) { animation-delay: 0.26s; }
+.card:nth-child(5) { animation-delay: 0.33s; }
+.card:nth-child(6) { animation-delay: 0.40s; }
+.card:nth-child(7) { animation-delay: 0.47s; }
+
+/* === SKETCH BORDER HELPERS === */
+.sketch-border-bottom {
+  border-bottom: 1.5px solid var(--ink);
+  border-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='2'%3E%3Cpath d='M0,1 Q25,0 50,1 T100,1' stroke='%232C2C2C' fill='none' stroke-width='1.5'/%3E%3C/svg%3E") 0 0 1 0/0 0 2px 0 stretch;
+}
+
+.sketch-border-left {
+  border-left: 2px solid var(--ink);
+  border-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='2' height='40'%3E%3Cpath d='M1,0 Q0,10 1,20 T1,40' stroke='%232C2C2C' fill='none' stroke-width='1.5'/%3E%3C/svg%3E") 0 0 0 1/0 0 0 2px stretch;
+}
+
+/* === KEYFRAME ANIMATIONS === */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes bubbleIn {
+  from { opacity: 0; transform: scale(0.92); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes gentleBob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-3px); }
+}
+
+@keyframes blink {
+  0%, 42%, 44%, 100% { transform: scaleY(1); }
+  43%                { transform: scaleY(0.1); }
+}
+
+@keyframes uploadPulse {
+  0%, 100% { border-color: var(--terracotta); }
+  50%      { border-color: var(--solar-gelb); }
+}
+
+/* === RESPONSIVE DASHBOARD GRID === */
+@media (max-width: 900px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr 1fr !important;
+    grid-template-areas:
+      "gridbert gridbert"
+      "kpi1     kpi2"
+      "chart    chart"
+      "tasks    news"
+      "question question"
+      "table    table" !important;
+  }
+}
+
+@media (max-width: 600px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr !important;
+    grid-template-areas:
+      "gridbert"
+      "kpi1"
+      "kpi2"
+      "chart"
+      "tasks"
+      "question"
+      "news"
+      "table" !important;
+  }
 }

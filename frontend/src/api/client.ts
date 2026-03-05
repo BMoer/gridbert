@@ -125,3 +125,42 @@ export function addWidget(widgetType: string, config: Record<string, unknown> = 
 export function deleteWidget(widgetId: number) {
   return apiFetch<void>(`/dashboard/widgets/${widgetId}`, { method: "DELETE" });
 }
+
+// --- User Files & Memory (for DocumentTable) ---
+
+export interface UserFile {
+  id: number;
+  file_name: string;
+  media_type: string;
+  size_bytes: number;
+  created_at: string;
+}
+
+export interface MemoryFact {
+  id: number;
+  fact_key: string;
+  fact_value: string;
+}
+
+// --- News ---
+
+export interface NewsItem {
+  titel: string;
+  zusammenfassung: string;
+  quelle: string;
+  url: string;
+  datum: string | null;
+  kategorie: string;
+}
+
+export function getEnergyNews() {
+  return apiFetch<NewsItem[]>("/news");
+}
+
+export function getUserFiles() {
+  return apiFetch<UserFile[]>("/files");
+}
+
+export function getUserMemory() {
+  return apiFetch<MemoryFact[]>("/memory");
+}

@@ -16,16 +16,17 @@ export function MessageBubble({ message, onSuggestionClick }: Props) {
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
-        className={`max-w-[80%] rounded-2xl px-4 py-3 ${
+        className="max-w-[80%] rounded-2xl px-4 py-3"
+        style={
           isUser
-            ? "bg-gridbert-500 text-white"
-            : "bg-white text-gray-800 shadow-sm border border-gray-100"
-        }`}
+            ? { background: "var(--terracotta)", color: "var(--kreide)" }
+            : { background: "var(--kreide)", color: "var(--ink)", boxShadow: "var(--shadow-card)" }
+        }
       >
         {/* Status message (while agent is thinking, before any content) */}
         {message.isStreaming && message.statusMessage && !message.content && !hasToolActivity && (
-          <div className="flex items-center gap-2 text-xs text-gray-400">
-            <span className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-gray-200 border-t-gridbert-500" />
+          <div className="flex items-center gap-2 text-xs" style={{ color: "var(--warm-grau)" }}>
+            <span className="h-3 w-3 shrink-0 animate-spin rounded-full" style={{ border: "2px solid var(--warm-grau)", borderTopColor: "var(--terracotta)" }} />
             {message.statusMessage}
           </div>
         )}
@@ -33,9 +34,9 @@ export function MessageBubble({ message, onSuggestionClick }: Props) {
         {/* Streaming cursor — only when no content, no tools, no status */}
         {message.isStreaming && !message.content && !hasToolActivity && !message.statusMessage && (
           <div className="flex space-x-1">
-            <span className="h-2 w-2 animate-bounce rounded-full bg-gridbert-400" />
-            <span className="h-2 w-2 animate-bounce rounded-full bg-gridbert-400 [animation-delay:0.1s]" />
-            <span className="h-2 w-2 animate-bounce rounded-full bg-gridbert-400 [animation-delay:0.2s]" />
+            <span className="h-2 w-2 animate-bounce rounded-full" style={{ background: "var(--terracotta)" }} />
+            <span className="h-2 w-2 animate-bounce rounded-full [animation-delay:0.1s]" style={{ background: "var(--terracotta)" }} />
+            <span className="h-2 w-2 animate-bounce rounded-full [animation-delay:0.2s]" style={{ background: "var(--terracotta)" }} />
           </div>
         )}
 
@@ -46,7 +47,7 @@ export function MessageBubble({ message, onSuggestionClick }: Props) {
               {message.content}
             </div>
           ) : (
-            <div className="prose prose-sm prose-gray max-w-none leading-relaxed [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_table]:block [&_table]:overflow-x-auto">
+            <div className="prose prose-sm max-w-none leading-relaxed [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_table]:block [&_table]:overflow-x-auto">
               <Markdown remarkPlugins={[remarkGfm]}>{message.content}</Markdown>
             </div>
           )
@@ -54,7 +55,7 @@ export function MessageBubble({ message, onSuggestionClick }: Props) {
 
         {/* Tool activity indicators — BELOW text so user sees them after reading */}
         {hasToolActivity && (
-          <div className={`space-y-1.5 ${message.content ? "mt-3 border-t border-gray-100 pt-3" : ""}`}>
+          <div className={`space-y-1.5 ${message.content ? "mt-3 pt-3" : ""}`} style={message.content ? { borderTop: "1px solid var(--bone)" } : undefined}>
             {message.toolActivity!.map((activity, i) => (
               <ToolIndicator key={i} activity={activity} />
             ))}
@@ -63,20 +64,23 @@ export function MessageBubble({ message, onSuggestionClick }: Props) {
 
         {/* "Still working" indicator — shown when streaming + has content or tools are done but more turns expected */}
         {message.isStreaming && (message.content || hasToolActivity) && !hasRunningTools && (
-          <div className="mt-2 flex items-center gap-2 text-xs text-gray-400">
-            <span className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-gray-200 border-t-gridbert-500" />
+          <div className="mt-2 flex items-center gap-2 text-xs" style={{ color: "var(--warm-grau)" }}>
+            <span className="h-3 w-3 shrink-0 animate-spin rounded-full" style={{ border: "2px solid var(--warm-grau)", borderTopColor: "var(--terracotta)" }} />
             {message.statusMessage || "Gridbert arbeitet noch..."}
           </div>
         )}
 
         {/* Suggestion chips */}
         {message.suggestions && message.suggestions.length > 0 && !message.isStreaming && onSuggestionClick && (
-          <div className="mt-3 flex flex-wrap gap-1.5 border-t border-gray-100 pt-3">
+          <div className="mt-3 flex flex-wrap gap-1.5 pt-3" style={{ borderTop: "1px solid var(--bone)" }}>
             {message.suggestions.map((suggestion) => (
               <button
                 key={suggestion}
                 onClick={() => onSuggestionClick(suggestion)}
-                className="rounded-full border border-gridbert-200 bg-gridbert-50 px-3 py-1 text-xs text-gridbert-700 transition-colors hover:border-gridbert-400 hover:bg-gridbert-100"
+                className="rounded-full border px-3 py-1 text-xs transition-colors"
+                style={{ background: "var(--kreide)", borderColor: "var(--warm-grau)", color: "var(--ink)" }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--terracotta)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--warm-grau)"; }}
               >
                 {suggestion}
               </button>
@@ -167,18 +171,18 @@ function ToolIndicator({ activity }: { activity: ToolActivity }) {
   const hasSummary = activity.summary && activity.status === "done";
 
   return (
-    <div className="rounded-lg border border-gridbert-100 bg-gridbert-50/70 text-xs text-gridbert-800">
+    <div className="rounded-lg border text-xs" style={{ borderColor: "var(--warm-grau)", background: "var(--bone)", color: "var(--ink)" }}>
       {/* Header row — always visible */}
       <button
         type="button"
         onClick={() => hasSummary && setExpanded(!expanded)}
-        className={`flex w-full items-center gap-2 px-3 py-1.5 ${hasSummary ? "cursor-pointer hover:bg-gridbert-50" : "cursor-default"}`}
+        className={`flex w-full items-center gap-2 px-3 py-1.5 ${hasSummary ? "cursor-pointer" : "cursor-default"}`}
       >
         {/* Status icon */}
         {isRunning ? (
-          <span className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-gridbert-300 border-t-gridbert-600" />
+          <span className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full" style={{ border: "2px solid var(--warm-grau)", borderTopColor: "var(--terracotta)" }} />
         ) : (
-          <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-gridbert-500 text-[9px] text-white">
+          <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full text-[9px] text-white" style={{ background: "var(--gruen)" }}>
             &#10003;
           </span>
         )}
@@ -187,13 +191,13 @@ function ToolIndicator({ activity }: { activity: ToolActivity }) {
         <span className="flex-1 text-left">
           <span className="font-medium">{label}</span>
           {inputDesc && (
-            <span className="ml-1.5 text-gridbert-500">{inputDesc}</span>
+            <span className="ml-1.5" style={{ color: "var(--warm-grau)" }}>{inputDesc}</span>
           )}
         </span>
 
         {/* Expand chevron (only if summary exists) */}
         {hasSummary && (
-          <span className={`text-gridbert-400 transition-transform ${expanded ? "rotate-180" : ""}`}>
+          <span className={`transition-transform ${expanded ? "rotate-180" : ""}`} style={{ color: "var(--warm-grau)" }}>
             &#9662;
           </span>
         )}
@@ -201,7 +205,7 @@ function ToolIndicator({ activity }: { activity: ToolActivity }) {
 
       {/* Expanded summary */}
       {expanded && hasSummary && (
-        <div className="border-t border-gridbert-100 px-3 py-2 text-gridbert-600">
+        <div className="px-3 py-2" style={{ borderTop: "1px solid var(--warm-grau)", color: "var(--ink)", opacity: 0.8 }}>
           <pre className="whitespace-pre-wrap font-sans">{activity.summary}</pre>
         </div>
       )}

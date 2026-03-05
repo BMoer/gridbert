@@ -71,14 +71,14 @@ export function ChatInput({ onSend, disabled }: Props) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="border-t border-gray-200 bg-white p-4">
+    <form onSubmit={handleSubmit} className="p-4" style={{ borderTop: "1px solid var(--warm-grau)", background: "var(--kreide)" }}>
       {/* File preview */}
       {(files.length > 0 || pendingReads > 0) && (
         <div className="mb-2 flex flex-wrap gap-2">
           {files.map((file, i) => (
             <div
               key={`${file.name}-${i}`}
-              className="flex items-center gap-1 rounded-lg bg-gray-100 px-2.5 py-1 text-xs text-gray-600"
+              className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs" style={{ background: "var(--bone)", color: "var(--ink)" }}
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
                 <path d="M3.5 2A1.5 1.5 0 0 0 2 3.5v9A1.5 1.5 0 0 0 3.5 14h9a1.5 1.5 0 0 0 1.5-1.5v-7A1.5 1.5 0 0 0 12.5 5H10a1 1 0 0 1-1-1V1.5A1.5 1.5 0 0 0 7.5 0h-4A1.5 1.5 0 0 0 2 1.5v1" />
@@ -87,15 +87,15 @@ export function ChatInput({ onSend, disabled }: Props) {
               <button
                 type="button"
                 onClick={() => removeFile(i)}
-                className="ml-1 text-gray-400 hover:text-red-500"
+                className="ml-1 hover:opacity-70" style={{ color: "var(--warm-grau)" }}
               >
                 &times;
               </button>
             </div>
           ))}
           {pendingReads > 0 && (
-            <div className="flex items-center gap-1 rounded-lg bg-gridbert-50 px-2.5 py-1 text-xs text-gridbert-600">
-              <span className="h-3 w-3 animate-spin rounded-full border-2 border-gridbert-200 border-t-gridbert-500" />
+            <div className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs" style={{ background: "var(--bone)", color: "var(--terracotta)" }}>
+              <span className="h-3 w-3 animate-spin rounded-full" style={{ border: "2px solid var(--warm-grau)", borderTopColor: "var(--terracotta)" }} />
               {pendingReads === 1 ? "Datei wird geladen..." : `${pendingReads} Dateien werden geladen...`}
             </div>
           )}
@@ -108,7 +108,7 @@ export function ChatInput({ onSend, disabled }: Props) {
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={disabled}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:opacity-50"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl disabled:opacity-50" style={{ color: "var(--warm-grau)" }}
           title="Datei anhängen (PDF, Bild)"
         >
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
@@ -132,12 +132,16 @@ export function ChatInput({ onSend, disabled }: Props) {
           placeholder="Schreib Gridbert eine Nachricht..."
           rows={1}
           disabled={disabled}
-          className="flex-1 resize-none rounded-xl border border-gray-300 px-4 py-2.5 text-sm focus:border-gridbert-500 focus:outline-none focus:ring-1 focus:ring-gridbert-500 disabled:opacity-50"
+          className="flex-1 resize-none rounded-xl border px-4 py-2.5 text-sm focus:outline-none disabled:opacity-50"
+          style={{ borderColor: "var(--warm-grau)", background: "var(--kreide)" }}
+          onFocus={(e) => { e.currentTarget.style.borderColor = "var(--terracotta)"; e.currentTarget.style.boxShadow = "0 0 0 1px var(--terracotta)"; }}
+          onBlur={(e) => { e.currentTarget.style.borderColor = "var(--warm-grau)"; e.currentTarget.style.boxShadow = "none"; }}
         />
         <button
           type="submit"
           disabled={disabled || !filesReady || (!text.trim() && files.length === 0)}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gridbert-500 text-white hover:bg-gridbert-600 disabled:opacity-50"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white disabled:opacity-50"
+          style={{ background: "var(--terracotta)" }}
         >
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
             <path d="M3.105 2.288a.75.75 0 0 0-.826.95l1.414 4.926A1.5 1.5 0 0 0 5.135 9.25h6.115a.75.75 0 0 1 0 1.5H5.135a1.5 1.5 0 0 0-1.442 1.086l-1.414 4.926a.75.75 0 0 0 .826.95l14.095-5.638a.75.75 0 0 0 0-1.398L3.105 2.288Z" />

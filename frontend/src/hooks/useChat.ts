@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { useChatStore } from "../stores/chatStore";
+import { useDashboardStore } from "../stores/dashboardStore";
 
 export interface FileAttachment {
   name: string;
@@ -126,6 +127,12 @@ function handleEvent(event: { type: string; data: Record<string, unknown> }) {
     case "status":
       store.setStatusMessage(event.data.message as string);
       break;
+    case "widget_add":
+      useDashboardStore.getState().addWidget(event.data as unknown as import("../api/client").Widget);
+      break;
+    case "widget_update":
+      useDashboardStore.getState().updateWidget(event.data as unknown as import("../api/client").Widget);
+      break;
     case "done":
       if (event.data.conversation_id) {
         store.setConversationId(event.data.conversation_id as number);
@@ -133,6 +140,8 @@ function handleEvent(event: { type: string; data: Record<string, unknown> }) {
       if (event.data.suggestions) {
         store.setSuggestions(event.data.suggestions as string[]);
       }
+      // Refresh files and memory after conversation (may have changed)
+      useDashboardStore.getState().refreshContext();
       break;
   }
 }

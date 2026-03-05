@@ -191,6 +191,20 @@ class GridbertAgent:
                         },
                     ))
 
+                    # Emit live widget event for dashboard updates
+                    if tool_name == "add_dashboard_widget":
+                        try:
+                            import json
+                            widget_data = json.loads(result_str)
+                            event_type = (
+                                EventType.WIDGET_UPDATE
+                                if widget_data.get("action") == "updated"
+                                else EventType.WIDGET_ADD
+                            )
+                            on_event(AgentEvent(type=event_type, data=widget_data))
+                        except Exception:
+                            pass  # Non-critical: dashboard will refresh on next load
+
                 tool_results.append({
                     "type": "tool_result",
                     "tool_use_id": tool_use["id"],

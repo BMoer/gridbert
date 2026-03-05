@@ -596,6 +596,94 @@ def build_default_registry(
 
             return f"[Dateiformat {media_type} wird nicht unterstützt.]"
 
+        # --- Dashboard Widget (live updates) -----------------------------------------
+        import json as _json
+
+        from gridbert.storage.schema import dashboard_widgets
+
+        def _add_dashboard_widget(
+            widget_type: str,
+            config: dict | None = None,
+            position: int = 0,
+        ) -> str:
+            """Insert or update a dashboard widget for this user."""
+            cfg = config or {}
+            # Check if widget of same type already exists → update
+            existing = db_conn.execute(
+                dashboard_widgets.select().where(
+                    dashboard_widgets.c.user_id == user_id,
+                    dashboard_widgets.c.widget_type == widget_type,
+                )
+            ).first()
+
+            if existing:
+                db_conn.execute(
+                    dashboard_widgets.update()
+                    .where(dashboard_widgets.c.id == existing.id)
+                    .values(config=_json.dumps(cfg), position=position)
+                )
+                db_conn.commit()
+                return _json.dumps({
+                    "id": existing.id,
+                    "widget_type": widget_type,
+                    "position": position,
+                    "config": cfg,
+                    "action": "updated",
+                })
+            else:
+                result = db_conn.execute(
+                    dashboard_widgets.insert().values(
+                        user_id=user_id,
+                        widget_type=widget_type,
+                        position=position,
+                        config=_json.dumps(cfg),
+                    )
+                )
+                db_conn.commit()
+                return _json.dumps({
+                    "id": result.inserted_primary_key[0],
+                    "widget_type": widget_type,
+                    "position": position,
+                    "config": cfg,
+                    "action": "created",
+                })
+
+        registry.register(
+            name="add_dashboard_widget",
+            description=(
+                "Füge eine Visualisierung zum Dashboard hinzu oder aktualisiere sie. "
+                "Nutze dies um dem User Ergebnisse visuell darzustellen — "
+                "KPIs, Charts, Tarifvergleiche, Einspar-Übersichten. "
+                "Das Widget erscheint sofort auf dem Dashboard während du sprichst. "
+                "Widget-Typen: savings_summary, tariff_comparison, consumption_chart, "
+                "consumption_kpi, spot_price, battery_sim, pv_sim."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "widget_type": {
+                        "type": "string",
+                        "description": (
+                            "Art des Widgets: savings_summary, tariff_comparison, "
+                            "consumption_chart, consumption_kpi, spot_price, "
+                            "battery_sim, pv_sim"
+                        ),
+                    },
+                    "config": {
+                        "type": "object",
+                        "description": "Widget-Daten als JSON-Objekt (z.B. {savings_eur: 340, ...})",
+                    },
+                    "position": {
+                        "type": "integer",
+                        "description": "Position im Dashboard (0 = oben)",
+                        "default": 0,
+                    },
+                },
+                "required": ["widget_type", "config"],
+            },
+            handler=_add_dashboard_widget,
+        )
+
         registry.register(
             name="get_user_file",
             description=(
