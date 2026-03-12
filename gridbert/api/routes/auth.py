@@ -70,7 +70,8 @@ def register(req: RegisterRequest, conn: DbConn) -> TokenResponse:
     if REGISTRATION_ALLOWLIST and req.email.lower() not in REGISTRATION_ALLOWLIST:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Registrierung ist derzeit nur auf Einladung möglich.",
+            detail="Registrierung ist derzeit nur auf Einladung möglich. "
+                   "Trag dich auf die Warteliste ein: www.gridbert.at",
         )
 
     existing = get_user_by_email(conn, req.email)
