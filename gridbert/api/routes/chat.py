@@ -33,6 +33,18 @@ log = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# After N messages on server key, gently ask user to bring their own key
+_NUDGE_AFTER_MESSAGES = 3
+_API_KEY_NUDGE = (
+    "\n\n---\n"
+    "*Kleiner Hinweis: Gridbert ist ein unfunded Hobbyprojekt — "
+    "du nutzt gerade meinen API-Schlüssel. "
+    "Wenn du einen eigenen hast (z.B. von [Anthropic](https://console.anthropic.com/) "
+    "oder [OpenAI](https://platform.openai.com/)), "
+    "kannst du ihn unter [Einstellungen](/settings) hinterlegen. "
+    "Damit hilfst du mir, Gridbert am Laufen zu halten. Danke!*"
+)
+
 
 class AttachmentData(BaseModel):
     type: str = "document"  # "image" or "document"
@@ -63,6 +75,7 @@ def chat(
 
     # Resolve LLM provider: user key > server key > error
     llm_config = get_user_llm_config(conn, user_id)
+    using_server_key = False
     if llm_config["api_key_enc"]:
         api_key = decrypt_value(llm_config["api_key_enc"])
         provider_name = llm_config["provider"] or "claude"
@@ -71,6 +84,7 @@ def chat(
         api_key = ANTHROPIC_API_KEY
         provider_name = "claude"
         model = CLAUDE_MODEL
+        using_server_key = True
     else:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -173,8 +187,19 @@ def chat(
         # Auf Agent-Thread warten
         thread.join(timeout=5)
 
-        # Assistant-Antwort persistieren
+        # Nudge: after N messages on server key, ask user to bring their own
         final_text = final_text_holder[0] if final_text_holder else ""
+        if using_server_key and final_text:
+            msg_count = len([m for m in history if m["role"] == "user"])
+            if msg_count >= _NUDGE_AFTER_MESSAGES:
+                nudge_event = json.dumps({
+                    "type": "text_delta",
+                    "data": {"text": _API_KEY_NUDGE},
+                })
+                yield f"data: {nudge_event}\n\n"
+                final_text += _API_KEY_NUDGE
+
+        # Assistant-Antwort persistieren
         try:
             if final_text:
                 add_message(conn, conversation_id, role="assistant", content=final_text)
