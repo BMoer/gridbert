@@ -44,3 +44,9 @@ UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", str(Path.home() / ".gridbert" / "uploa
 
 # --- ENTSO-E (spot prices, Phase 3) ------------------------------------------
 ENTSOE_API_KEY: str = os.getenv("ENTSOE_API_KEY", "")
+
+# --- Security ----------------------------------------------------------------
+CHAT_RATE_LIMIT: int = int(os.getenv("CHAT_RATE_LIMIT", "10"))  # per user per minute (server key only)
+REGISTRATION_ALLOWLIST: list[str] = [
+    e.strip().lower() for e in os.getenv("REGISTRATION_ALLOWLIST", "").split(",") if e.strip()
+]

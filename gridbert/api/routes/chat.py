@@ -93,6 +93,10 @@ def chat(
 
     llm_provider = create_provider(provider_name, api_key, model)
 
+    if using_server_key:
+        from gridbert.api.rate_limit import check_rate_limit
+        check_rate_limit(user_id)
+
     log.info("Chat request: message=%r, conv=%s, attachments=%d",
              req.message[:50], req.conversation_id,
              len(req.attachments) if req.attachments else 0)

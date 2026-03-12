@@ -65,6 +65,14 @@ def _create_token(user_id: int) -> str:
 @router.post("/register", response_model=TokenResponse)
 def register(req: RegisterRequest, conn: DbConn) -> TokenResponse:
     """Neuen User registrieren."""
+    from gridbert.config import REGISTRATION_ALLOWLIST
+
+    if REGISTRATION_ALLOWLIST and req.email.lower() not in REGISTRATION_ALLOWLIST:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Registrierung ist derzeit nur auf Einladung möglich.",
+        )
+
     existing = get_user_by_email(conn, req.email)
     if existing is not None:
         raise HTTPException(
