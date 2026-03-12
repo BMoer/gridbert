@@ -1,6 +1,6 @@
 /** API client for Gridbert backend. */
 
-const BASE = "/api";
+export const BASE = import.meta.env.VITE_API_BASE || "/api";
 
 /** Get stored JWT token. */
 function getToken(): string | null {
@@ -209,4 +209,8 @@ export function setLLMConfig(config: LLMConfigInput) {
 
 export function deleteLLMConfig() {
   return apiFetch<void>("/settings/llm", { method: "DELETE" });
+}
+
+export function resetAllData() {
+  return apiFetch<{ status: string }>("/settings/reset", { method: "DELETE" });
 }

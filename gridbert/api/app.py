@@ -14,6 +14,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from gridbert.config import CORS_ORIGINS, ENVIRONMENT
+
+import os
+SERVE_STATIC = os.getenv("SERVE_STATIC", "true").lower() != "false"
 from gridbert.storage.database import init_db
 
 log = logging.getLogger(__name__)
@@ -63,9 +66,11 @@ def create_app() -> FastAPI:
         return {"status": "ok", "version": "1.0.0"}
 
     # In Produktion: Frontend-Build als statische Dateien servieren
-    static_dir = Path(__file__).resolve().parent.parent.parent / "static"
-    if static_dir.is_dir():
-        app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
-        log.info("Serving frontend from %s", static_dir)
+    # (disabled on Fly.io where SERVE_STATIC=false — Vercel serves the frontend)
+    if SERVE_STATIC:
+        static_dir = Path(__file__).resolve().parent.parent.parent / "static"
+        if static_dir.is_dir():
+            app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
+            log.info("Serving frontend from %s", static_dir)
 
     return app

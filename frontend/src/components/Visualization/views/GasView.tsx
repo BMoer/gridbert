@@ -20,8 +20,9 @@ export function GasView({ widget }: Props) {
   }
 
   const config = widget.config;
-  const tariffs = (config.tariffs ?? []) as { lieferant?: string; tarif?: string; preis_eur?: number }[];
-  const savingsEur = config.savings_eur as number | undefined;
+  // Accept both English and German field names
+  const tariffs = (config.tariffs ?? config.tarife ?? []) as Record<string, unknown>[];
+  const savingsEur = (config.savings_eur ?? config.max_ersparnis_eur ?? config.ersparnis_eur) as number | undefined;
 
   return (
     <div>
@@ -31,7 +32,7 @@ export function GasView({ widget }: Props) {
         <div className="card" style={{ padding: "1rem", marginTop: "1.25rem", borderLeft: "3px solid var(--gruen)" }}>
           <div style={{ fontFamily: "var(--font-body)", fontSize: "0.8rem", color: "var(--warm-grau)", marginBottom: "0.25rem" }}>Ersparnis</div>
           <div style={{ fontFamily: "var(--font-mono)", fontSize: "1.5rem", fontWeight: 600, color: "var(--gruen)" }}>
-            {savingsEur.toFixed(0)} <span style={{ fontSize: "0.85rem", fontWeight: 400, color: "var(--warm-grau)" }}>€/Jahr</span>
+            {Number(savingsEur).toFixed(0)} <span style={{ fontSize: "0.85rem", fontWeight: 400, color: "var(--warm-grau)" }}>€/Jahr</span>
           </div>
         </div>
       )}
@@ -47,15 +48,22 @@ export function GasView({ widget }: Props) {
               </tr>
             </thead>
             <tbody>
-              {tariffs.map((t, i) => (
-                <tr key={i} style={{ borderBottom: "1px solid var(--bone)", background: i === 0 ? "rgba(74,139,110,0.06)" : undefined }}>
-                  <td style={{ padding: "0.5rem", fontWeight: i === 0 ? 600 : 400 }}>{t.lieferant ?? "—"}</td>
-                  <td style={{ padding: "0.5rem" }}>{t.tarif ?? "—"}</td>
-                  <td style={{ padding: "0.5rem", textAlign: "right", fontFamily: "var(--font-mono)" }}>
-                    {t.preis_eur != null ? `${t.preis_eur.toFixed(0)} €` : "—"}
-                  </td>
-                </tr>
-              ))}
+              {tariffs.map((t, i) => {
+                const name = (t.lieferant ?? t.anbieter ?? "—") as string;
+                const tarif = (t.tarif ?? t.tarif_name ?? "—") as string;
+                const cost = (t.preis_eur ?? t.jahreskosten_eur ?? t.gaspreis_ct_kwh) as number | undefined;
+                const isCt = t.gaspreis_ct_kwh != null && t.preis_eur == null && t.jahreskosten_eur == null;
+
+                return (
+                  <tr key={i} style={{ borderBottom: "1px solid var(--bone)", background: i === 0 ? "rgba(74,139,110,0.06)" : undefined }}>
+                    <td style={{ padding: "0.5rem", fontWeight: i === 0 ? 600 : 400 }}>{name}</td>
+                    <td style={{ padding: "0.5rem" }}>{tarif}</td>
+                    <td style={{ padding: "0.5rem", textAlign: "right", fontFamily: "var(--font-mono)" }}>
+                      {cost != null ? (isCt ? `${Number(cost).toFixed(2)} Ct/kWh` : `${Number(cost).toFixed(0)} €`) : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

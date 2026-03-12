@@ -5,7 +5,6 @@ import { ChartArea } from "./ChartArea";
 import { GridbertArea } from "./GridbertArea";
 import { TaskList } from "./TaskList";
 import { QuestionArea } from "./QuestionArea";
-import { NewsArea } from "./NewsArea";
 import { DocumentTable } from "./DocumentTable";
 
 interface Props {
@@ -36,12 +35,12 @@ export function Dashboard({ onOpenChat }: Props) {
       ${hasKpis && !hasChart ? '"kpi1  gridbert gridbert"' : ""}
       ${hasKpis && !hasChart ? '"kpi2  gridbert gridbert"' : ""}
       ${!hasKpis && hasChart ? '"chart chart    gridbert"' : ""}
-      "tasks question news"
+      "tasks question question"
       "table table    table"
     `
     : `
       "gridbert gridbert gridbert"
-      "tasks   question news"
+      "tasks   question question"
       "table   table    table"
     `;
 
@@ -97,7 +96,6 @@ export function Dashboard({ onOpenChat }: Props) {
       <GridbertArea onOpenChat={onOpenChat} />
       <TaskList onOpenChat={onOpenChat} />
       <QuestionArea onOpenChat={onOpenChat} />
-      <NewsArea />
       <DocumentTable />
     </div>
   );

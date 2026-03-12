@@ -1,6 +1,7 @@
 import { useCallback, useRef } from "react";
 import { useChatStore } from "../stores/chatStore";
 import { useDashboardStore } from "../stores/dashboardStore";
+import { BASE } from "../api/client";
 
 export interface FileAttachment {
   name: string;
@@ -42,7 +43,7 @@ export function useChat() {
           data: f.data,
         }));
 
-        const res = await fetch("/api/chat", {
+        const res = await fetch(`${BASE}/chat`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

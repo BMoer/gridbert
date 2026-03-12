@@ -1,14 +1,6 @@
 import type { Widget } from "../../../api/client";
 import { ViewHeader } from "./shared/ViewHeader";
 
-interface Tariff {
-  lieferant?: string;
-  tarif?: string;
-  preis_eur?: number;
-  energiepreis_ct?: number;
-  grundgebuehr_eur?: number;
-}
-
 interface Props {
   tariffWidget?: Widget;
   savingsWidget?: Widget;
@@ -29,10 +21,16 @@ export function TariffView({ tariffWidget, savingsWidget }: Props) {
   }
 
   const config = tariffWidget?.config ?? {};
-  const currentCost = config.current_cost_eur as number | undefined;
-  const bestCost = config.best_cost_eur as number | undefined;
-  const savingsEur = savingsWidget?.config?.savings_eur ?? config.savings_eur;
-  const tariffs = (config.tariffs ?? []) as Tariff[];
+
+  // Accept both English and German field names
+  const currentCost = (config.current_cost_eur ?? config.aktuelle_kosten_eur) as number | undefined;
+  const bestCost = (config.best_cost_eur ?? config.beste_kosten_eur ?? config.bester_tarif_kosten_eur) as number | undefined;
+  const savingsEur = savingsWidget?.config?.savings_eur
+    ?? savingsWidget?.config?.max_ersparnis_eur
+    ?? config.savings_eur
+    ?? config.max_ersparnis_eur
+    ?? config.ersparnis_eur;
+  const tariffs = (config.tariffs ?? config.alternativen ?? config.tarife ?? []) as Record<string, unknown>[];
 
   return (
     <div>
@@ -53,7 +51,7 @@ export function TariffView({ tariffWidget, savingsWidget }: Props) {
               Aktuelle Kosten
             </div>
             <div style={{ fontFamily: "var(--font-mono)", fontSize: "1.5rem", fontWeight: 600, color: "var(--ink)" }}>
-              {currentCost.toFixed(0)} <span style={{ fontSize: "0.85rem", fontWeight: 400, color: "var(--warm-grau)" }}>€/Jahr</span>
+              {Number(currentCost).toFixed(0)} <span style={{ fontSize: "0.85rem", fontWeight: 400, color: "var(--warm-grau)" }}>€/Jahr</span>
             </div>
           </div>
         )}
@@ -63,7 +61,7 @@ export function TariffView({ tariffWidget, savingsWidget }: Props) {
               Bester Tarif
             </div>
             <div style={{ fontFamily: "var(--font-mono)", fontSize: "1.5rem", fontWeight: 600, color: "var(--gruen)" }}>
-              {bestCost.toFixed(0)} <span style={{ fontSize: "0.85rem", fontWeight: 400, color: "var(--warm-grau)" }}>€/Jahr</span>
+              {Number(bestCost).toFixed(0)} <span style={{ fontSize: "0.85rem", fontWeight: 400, color: "var(--warm-grau)" }}>€/Jahr</span>
             </div>
           </div>
         )}
@@ -92,24 +90,31 @@ export function TariffView({ tariffWidget, savingsWidget }: Props) {
               </tr>
             </thead>
             <tbody>
-              {tariffs.map((t, i) => (
-                <tr
-                  key={i}
-                  style={{
-                    borderBottom: "1px solid var(--bone)",
-                    background: i === 0 ? "rgba(74,139,110,0.06)" : undefined,
-                  }}
-                >
-                  <td style={{ padding: "0.5rem", fontWeight: i === 0 ? 600 : 400 }}>{t.lieferant ?? "—"}</td>
-                  <td style={{ padding: "0.5rem" }}>{t.tarif ?? "—"}</td>
-                  <td style={{ padding: "0.5rem", textAlign: "right", fontFamily: "var(--font-mono)" }}>
-                    {t.preis_eur != null ? `${t.preis_eur.toFixed(0)} €` : "—"}
-                  </td>
-                  <td style={{ padding: "0.5rem", textAlign: "right", fontFamily: "var(--font-mono)" }}>
-                    {t.energiepreis_ct != null ? `${t.energiepreis_ct.toFixed(2)} Ct` : "—"}
-                  </td>
-                </tr>
-              ))}
+              {tariffs.map((t, i) => {
+                const name = (t.lieferant ?? t.anbieter ?? "—") as string;
+                const tarif = (t.tarif ?? t.tarif_name ?? "—") as string;
+                const cost = (t.preis_eur ?? t.jahreskosten_eur) as number | undefined;
+                const energy = (t.energiepreis_ct ?? t.energiepreis_ct_kwh) as number | undefined;
+
+                return (
+                  <tr
+                    key={i}
+                    style={{
+                      borderBottom: "1px solid var(--bone)",
+                      background: i === 0 ? "rgba(74,139,110,0.06)" : undefined,
+                    }}
+                  >
+                    <td style={{ padding: "0.5rem", fontWeight: i === 0 ? 600 : 400 }}>{name}</td>
+                    <td style={{ padding: "0.5rem" }}>{tarif}</td>
+                    <td style={{ padding: "0.5rem", textAlign: "right", fontFamily: "var(--font-mono)" }}>
+                      {cost != null ? `${Number(cost).toFixed(0)} €` : "—"}
+                    </td>
+                    <td style={{ padding: "0.5rem", textAlign: "right", fontFamily: "var(--font-mono)" }}>
+                      {energy != null ? `${Number(energy).toFixed(2)} Ct` : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

@@ -17,7 +17,7 @@ export function TaskList({ onOpenChat }: Props) {
   const userFiles = useDashboardStore((s) => s.userFiles);
   const { sendMessage, isLoading } = useChat();
 
-  // Derive tasks from user state
+  // Derive tasks from user state — focused 3-step journey
   const tasks: TaskItem[] = [
     {
       label: "Stromrechnung hochgeladen",
@@ -25,19 +25,14 @@ export function TaskList({ onOpenChat }: Props) {
       chatPrompt: "Ich möchte meine Stromrechnung hochladen. Wie mache ich das?",
     },
     {
-      label: "Lastgang analysiert",
-      done: widgets.some((w) => w.widget_type === "consumption_chart" || w.widget_type === "consumption_kpi"),
-      chatPrompt: "Kannst du meinen Lastgang analysieren?",
-    },
-    {
       label: "Tarife verglichen",
       done: widgets.some((w) => w.widget_type === "tariff_comparison"),
       chatPrompt: "Vergleiche bitte die Stromtarife für mich.",
     },
     {
-      label: "Speicher-Analyse starten",
-      done: widgets.some((w) => w.widget_type === "battery_sim"),
-      chatPrompt: "Simuliere einen Batteriespeicher für mich.",
+      label: "Tarifwechsel eingeleitet",
+      done: widgets.some((w) => w.widget_type === "switching_status"),
+      chatPrompt: "Ich möchte den Tarif wechseln.",
     },
   ];
 

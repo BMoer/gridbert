@@ -1,0 +1,29 @@
+# Gridbert API — Fly.io Deployment
+# SPDX-License-Identifier: AGPL-3.0-only
+
+app = "gridbert-api"
+primary_region = "fra"
+
+[build]
+  dockerfile = "Dockerfile.fly"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[mounts]
+  source = "gridbert_data"
+  destination = "/data"
+
+[env]
+  ENVIRONMENT = "production"
+  DATABASE_URL = "sqlite:////data/gridbert.db"
+  UPLOAD_DIR = "/data/uploads"
+  CORS_ORIGINS = "https://app.gridbert.at"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

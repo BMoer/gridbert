@@ -115,6 +115,15 @@ body {
   43%                { transform: scaleY(0.1); }
 }
 
+@keyframes wave {
+  0%, 60%, 100% { transform: rotate(0deg); }
+  10%           { transform: rotate(14deg); }
+  20%           { transform: rotate(-8deg); }
+  30%           { transform: rotate(10deg); }
+  40%           { transform: rotate(-4deg); }
+  50%           { transform: rotate(6deg); }
+}
+
 @keyframes uploadPulse {
   0%, 100% { border-color: var(--terracotta); }
   50%      { border-color: var(--solar-gelb); }

@@ -20,7 +20,8 @@ export function BEGView({ widget }: Props) {
   }
 
   const config = widget.config;
-  const providers = (config.providers ?? []) as { name?: string; preis_ct?: number; ersparnis_eur?: number; region?: string }[];
+  // Accept both English and German field names
+  const providers = (config.providers ?? config.optionen ?? []) as Record<string, unknown>[];
 
   return (
     <div>
@@ -35,32 +36,39 @@ export function BEGView({ widget }: Props) {
             marginTop: "1.25rem",
           }}
         >
-          {providers.map((p, i) => (
-            <div key={i} className="card" style={{ padding: "1.25rem" }}>
-              <div style={{ fontFamily: "var(--font-display)", fontSize: "1rem", fontWeight: 600, color: "var(--ink)", marginBottom: "0.5rem" }}>
-                {p.name ?? `BEG ${i + 1}`}
-              </div>
-              {p.region && (
-                <div style={{ fontFamily: "var(--font-body)", fontSize: "0.8rem", color: "var(--warm-grau)", marginBottom: "0.5rem" }}>
-                  {p.region}
+          {providers.map((p, i) => {
+            const name = (p.name ?? p.beg_name ?? `BEG ${i + 1}`) as string;
+            const region = (p.region ?? p.bundesland) as string | undefined;
+            const price = (p.preis_ct ?? p.beg_preis_ct_kwh ?? p.preis_ct_kwh) as number | undefined;
+            const savings = (p.ersparnis_eur ?? p.ersparnis_jahr_eur) as number | undefined;
+
+            return (
+              <div key={i} className="card" style={{ padding: "1.25rem" }}>
+                <div style={{ fontFamily: "var(--font-display)", fontSize: "1rem", fontWeight: 600, color: "var(--ink)", marginBottom: "0.5rem" }}>
+                  {name}
                 </div>
-              )}
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem", fontSize: "0.85rem" }}>
-                {p.preis_ct != null && (
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <span style={{ color: "var(--warm-grau)" }}>Energiepreis</span>
-                    <span style={{ fontFamily: "var(--font-mono)", fontWeight: 500 }}>{p.preis_ct.toFixed(2)} Ct/kWh</span>
+                {region && (
+                  <div style={{ fontFamily: "var(--font-body)", fontSize: "0.8rem", color: "var(--warm-grau)", marginBottom: "0.5rem" }}>
+                    {region}
                   </div>
                 )}
-                {p.ersparnis_eur != null && (
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <span style={{ color: "var(--warm-grau)" }}>Ersparnis</span>
-                    <span style={{ fontFamily: "var(--font-mono)", fontWeight: 500, color: "var(--gruen)" }}>{p.ersparnis_eur.toFixed(0)} €/Jahr</span>
-                  </div>
-                )}
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem", fontSize: "0.85rem" }}>
+                  {price != null && (
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span style={{ color: "var(--warm-grau)" }}>Energiepreis</span>
+                      <span style={{ fontFamily: "var(--font-mono)", fontWeight: 500 }}>{Number(price).toFixed(2)} Ct/kWh</span>
+                    </div>
+                  )}
+                  {savings != null && (
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span style={{ color: "var(--warm-grau)" }}>Ersparnis</span>
+                      <span style={{ fontFamily: "var(--font-mono)", fontWeight: 500, color: "var(--gruen)" }}>{Number(savings).toFixed(0)} €/Jahr</span>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

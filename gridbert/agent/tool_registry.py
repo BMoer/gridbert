@@ -789,3 +789,35 @@ def build_default_registry(
         )
 
     return registry
+
+
+def build_core_registry(
+    user_id: int | None = None,
+    db_conn: Any | None = None,
+    llm_provider: Any | None = None,
+) -> ToolRegistry:
+    """Registry mit nur den Kern-Tools für die fokussierte User Journey.
+
+    Aktive Tools: parse_invoice, compare_tariffs, generate_savings_report,
+    update_user_memory, get_user_file, add_dashboard_widget.
+    """
+    full = build_default_registry(
+        user_id=user_id, db_conn=db_conn, llm_provider=llm_provider,
+    )
+
+    core_tools = {
+        "parse_invoice",
+        "compare_tariffs",
+        "generate_savings_report",
+        "update_user_memory",
+        "get_user_file",
+        "add_dashboard_widget",
+    }
+
+    registry = ToolRegistry()
+    for name in core_tools:
+        if name in full._definitions and name in full._handlers:
+            registry._definitions[name] = full._definitions[name]
+            registry._handlers[name] = full._handlers[name]
+
+    return registry

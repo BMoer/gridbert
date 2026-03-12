@@ -5,6 +5,14 @@ interface Props {
   widget?: Widget;
 }
 
+/** Pick the first non-null numeric value from config. */
+function pick(config: Record<string, unknown>, ...keys: string[]): number | null {
+  for (const key of keys) {
+    if (config[key] != null) return Number(config[key]);
+  }
+  return null;
+}
+
 /** Dedicated dashboard for spot tariff analysis. */
 export function SpotView({ widget }: Props) {
   if (!widget) {
@@ -21,16 +29,22 @@ export function SpotView({ widget }: Props) {
 
   const config = widget.config;
 
+  // Accept both English and German field names
+  const spotCost = pick(config, "spot_cost_eur", "spot_kosten_eur");
+  const fixCost = pick(config, "fix_cost_eur", "fix_kosten_eur", "voll_kosten_eur");
+  const savings = pick(config, "savings_eur", "ersparnis_vs_fix_eur", "ersparnis_eur");
+  const profileFactor = pick(config, "profile_factor_pct", "profilkostenfaktor_pct");
+
   const metrics: { label: string; value: string; unit: string; color?: string }[] = [
-    ...(config.spot_cost_eur != null ? [{ label: "Spot-Kosten", value: Number(config.spot_cost_eur).toFixed(0), unit: "€/Jahr" }] : []),
-    ...(config.fix_cost_eur != null ? [{ label: "Fix-Tarif-Kosten", value: Number(config.fix_cost_eur).toFixed(0), unit: "€/Jahr" }] : []),
-    ...(config.savings_eur != null ? [{
+    ...(spotCost != null ? [{ label: "Spot-Kosten", value: spotCost.toFixed(0), unit: "€/Jahr" }] : []),
+    ...(fixCost != null ? [{ label: "Fix-Tarif-Kosten", value: fixCost.toFixed(0), unit: "€/Jahr" }] : []),
+    ...(savings != null ? [{
       label: "Ersparnis mit Spot",
-      value: Number(config.savings_eur).toFixed(0),
+      value: savings.toFixed(0),
       unit: "€/Jahr",
-      color: Number(config.savings_eur) > 0 ? "var(--gruen)" : "var(--terracotta)",
+      color: savings > 0 ? "var(--gruen)" : "var(--terracotta)",
     }] : []),
-    ...(config.profile_factor_pct != null ? [{ label: "Profil-Kostenfaktor", value: Number(config.profile_factor_pct).toFixed(1), unit: "%" }] : []),
+    ...(profileFactor != null ? [{ label: "Profil-Kostenfaktor", value: profileFactor.toFixed(1), unit: "%" }] : []),
   ];
 
   return (

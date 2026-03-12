@@ -2,24 +2,12 @@ import { useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useDashboardStore } from "../../stores/dashboardStore";
 import { InvoiceView } from "./views/InvoiceView";
-import { LoadProfileView } from "./views/LoadProfileView";
 import { TariffView } from "./views/TariffView";
-import { BatteryView } from "./views/BatteryView";
-import { PVView } from "./views/PVView";
-import { SpotView } from "./views/SpotView";
-import { GasView } from "./views/GasView";
-import { BEGView } from "./views/BEGView";
 
 /** Map URL param → page title. */
 const VIEW_TITLES: Record<string, string> = {
   invoice: "Stromrechnung",
-  load_profile: "Lastprofil-Analyse",
   tariff: "Tarifvergleich",
-  battery: "Speicher-Simulation",
-  pv: "PV-Anlage",
-  spot: "Spot-Tarif",
-  gas: "Gastarife",
-  beg: "Energiegemeinschaft",
 };
 
 /**
@@ -112,13 +100,6 @@ function renderView(
   switch (view) {
     case "invoice":
       return <InvoiceView widget={findWidget("invoice_summary")} />;
-    case "load_profile":
-      return (
-        <LoadProfileView
-          kpiWidget={findWidget("consumption_kpi")}
-          chartWidget={findWidget("consumption_chart")}
-        />
-      );
     case "tariff":
       return (
         <TariffView
@@ -126,16 +107,6 @@ function renderView(
           savingsWidget={findWidget("savings_summary")}
         />
       );
-    case "battery":
-      return <BatteryView widget={findWidget("battery_sim")} />;
-    case "pv":
-      return <PVView widget={findWidget("pv_sim")} />;
-    case "spot":
-      return <SpotView widget={findWidget("spot_price")} />;
-    case "gas":
-      return <GasView widget={findWidget("gas_comparison")} />;
-    case "beg":
-      return <BEGView widget={findWidget("beg_comparison")} />;
     default:
       return (
         <div style={{ textAlign: "center", padding: "3rem", color: "var(--warm-grau)" }}>

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import base64
 import logging
+import time
 from typing import Any
 
 import anthropic
@@ -14,6 +15,8 @@ import anthropic
 from gridbert.llm.types import LLMContentBlock, LLMResponse, LLMTextBlock, LLMToolUseBlock
 
 log = logging.getLogger(__name__)
+
+_RETRY_DELAYS = (5, 15, 45)  # seconds — exponential backoff for 429s
 
 
 class ClaudeProvider:
@@ -35,13 +38,7 @@ class ClaudeProvider:
         max_tokens: int,
     ) -> LLMResponse:
         """Send request to Claude Messages API and return normalized response."""
-        response = self._client.messages.create(
-            model=self._model,
-            system=system,
-            messages=messages,
-            tools=tools,
-            max_tokens=max_tokens,
-        )
+        response = self._chat_with_retry(system, messages, tools, max_tokens)
 
         blocks: list[LLMContentBlock] = []
         for block in response.content:
@@ -56,6 +53,37 @@ class ClaudeProvider:
 
         stop = "end_turn" if response.stop_reason == "end_turn" else "tool_use"
         return LLMResponse(content=tuple(blocks), stop_reason=stop)
+
+    def _chat_with_retry(
+        self,
+        system: str,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        max_tokens: int,
+    ) -> Any:
+        """Call Claude API with exponential backoff on 429 rate limit errors."""
+        for attempt, delay in enumerate((*_RETRY_DELAYS, 0)):
+            try:
+                return self._client.messages.create(
+                    model=self._model,
+                    system=system,
+                    messages=messages,
+                    tools=tools,
+                    max_tokens=max_tokens,
+                )
+            except anthropic.RateLimitError:
+                if delay == 0:
+                    raise
+                retry_after = delay
+                log.warning(
+                    "Rate limit (429), Versuch %d/%d — warte %ds",
+                    attempt + 1,
+                    len(_RETRY_DELAYS),
+                    retry_after,
+                )
+                time.sleep(retry_after)
+        # unreachable, but satisfies type checker
+        raise RuntimeError("Retry exhausted")  # pragma: no cover
 
     def build_user_content(
         self,

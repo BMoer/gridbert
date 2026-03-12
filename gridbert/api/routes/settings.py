@@ -6,15 +6,26 @@
 from __future__ import annotations
 
 import logging
+import shutil
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
+from sqlalchemy import select
 
 from gridbert.api.deps import CurrentUserId, DbConn
-from gridbert.config import ANTHROPIC_API_KEY, CLAUDE_MODEL
+from gridbert.config import ANTHROPIC_API_KEY, CLAUDE_MODEL, UPLOAD_DIR
 from gridbert.crypto import decrypt_value, encrypt_value
 from gridbert.llm import create_provider
 from gridbert.storage.repositories.user_repo import get_user_llm_config, set_user_llm_config
+from gridbert.storage.schema import (
+    analyses,
+    conversations,
+    dashboard_widgets,
+    messages,
+    uploaded_files,
+    user_memory,
+)
 
 log = logging.getLogger(__name__)
 
@@ -140,3 +151,48 @@ def delete_llm_config(
     conn.commit()
     log.info("User %d removed LLM config", user_id)
     return {"status": "removed"}
+
+
+@router.delete("/reset")
+def reset_all_user_data(
+    user_id: CurrentUserId,
+    conn: DbConn,
+) -> dict[str, str]:
+    """DEBUG: Delete all user data (conversations, files, memory, widgets, LLM config).
+
+    Does NOT delete the user account itself.
+    """
+    # 1. Delete messages (child of conversations)
+    conv_ids = [
+        row.id
+        for row in conn.execute(
+            select(conversations.c.id).where(conversations.c.user_id == user_id)
+        ).all()
+    ]
+    if conv_ids:
+        conn.execute(messages.delete().where(messages.c.conversation_id.in_(conv_ids)))
+
+    # 2. Delete conversations
+    conn.execute(conversations.delete().where(conversations.c.user_id == user_id))
+
+    # 3. Delete analyses
+    conn.execute(analyses.delete().where(analyses.c.user_id == user_id))
+
+    # 4. Delete user memory
+    conn.execute(user_memory.delete().where(user_memory.c.user_id == user_id))
+
+    # 5. Delete dashboard widgets
+    conn.execute(dashboard_widgets.delete().where(dashboard_widgets.c.user_id == user_id))
+
+    # 6. Delete uploaded files (DB rows + disk files)
+    conn.execute(uploaded_files.delete().where(uploaded_files.c.user_id == user_id))
+    user_upload_dir = Path(UPLOAD_DIR) / str(user_id)
+    if user_upload_dir.exists():
+        shutil.rmtree(user_upload_dir, ignore_errors=True)
+
+    # 7. Clear LLM config
+    set_user_llm_config(conn, user_id, "", "", "")
+
+    conn.commit()
+    log.info("User %d: all data reset", user_id)
+    return {"status": "reset"}

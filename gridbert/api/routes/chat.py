@@ -16,7 +16,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from gridbert.agent.loop import GridbertAgent
-from gridbert.agent.tool_registry import build_default_registry
+from gridbert.agent.tool_registry import build_core_registry
 from gridbert.agent.types import AgentEvent, EventType
 from gridbert.api.deps import CurrentUserId, DbConn
 from gridbert.config import ANTHROPIC_API_KEY, CLAUDE_MODEL
@@ -116,7 +116,7 @@ def chat(
     conn.commit()
 
     # Agent bauen — mit User-Kontext für Memory-Tool und Datei-Zugriff
-    registry = build_default_registry(user_id=user_id, db_conn=conn, llm_provider=llm_provider)
+    registry = build_core_registry(user_id=user_id, db_conn=conn, llm_provider=llm_provider)
     agent = GridbertAgent(
         tool_registry=registry,
         llm_provider=llm_provider,

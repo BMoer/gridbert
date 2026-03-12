@@ -101,18 +101,21 @@ export function GridbertArea({ onOpenChat }: Props) {
           {/* Glasses */}
           <circle cx="50" cy="62" r="14" stroke="#2C2C2C" strokeWidth="2" fill="none" />
           <circle cx="80" cy="62" r="14" stroke="#2C2C2C" strokeWidth="2" fill="none" />
-          <path d="M64,60 Q65,56 66,60" stroke="#2C2C2C" strokeWidth="1.8" fill="none" />
+          <path d="M64,60 Q65,57 66,60" stroke="#2C2C2C" strokeWidth="1.5" fill="none" />
           <line x1="36" y1="60" x2="25" y2="56" stroke="#2C2C2C" strokeWidth="1.8" strokeLinecap="round" />
           <line x1="94" y1="60" x2="105" y2="56" stroke="#2C2C2C" strokeWidth="1.8" strokeLinecap="round" />
-          {/* Eyes */}
+          {/* Eyes — friendly, slightly looking up */}
           <g style={{ animation: "blink 4s ease-in-out infinite", transformOrigin: "65px 62px" }}>
-            <circle cx="50" cy="61" r="3" fill="#2C2C2C" />
-            <circle cx="80" cy="61" r="3" fill="#2C2C2C" />
-            <circle cx="51.5" cy="59.5" r="1" fill="var(--kreide)" />
-            <circle cx="81.5" cy="59.5" r="1" fill="var(--kreide)" />
+            <circle cx="50" cy="60" r="3.5" fill="#2C2C2C" />
+            <circle cx="80" cy="60" r="3.5" fill="#2C2C2C" />
+            <circle cx="51.5" cy="58.5" r="1.5" fill="var(--kreide)" />
+            <circle cx="81.5" cy="58.5" r="1.5" fill="var(--kreide)" />
           </g>
-          {/* Mouth */}
-          <path d="M58,78 Q65,84 72,78" stroke="#2C2C2C" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+          {/* Cheeks — subtle warm blush */}
+          <circle cx="42" cy="72" r="5" fill="#C4654A" opacity="0.15" />
+          <circle cx="88" cy="72" r="5" fill="#C4654A" opacity="0.15" />
+          {/* Mouth — wider, warmer smile */}
+          <path d="M55,77 Q65,86 75,77" stroke="#2C2C2C" strokeWidth="1.5" fill="none" strokeLinecap="round" />
           {/* Bow-tie */}
           <polygon points="55,112 65,107 65,117" fill="#C4654A" stroke="#2C2C2C" strokeWidth="1" />
           <polygon points="75,112 65,107 65,117" fill="#C4654A" stroke="#2C2C2C" strokeWidth="1" />
@@ -122,10 +125,12 @@ export function GridbertArea({ onOpenChat }: Props) {
           <line x1="80" y1="110" x2="85" y2="140" stroke="#2C2C2C" strokeWidth="2" strokeLinecap="round" />
           <line x1="45" y1="140" x2="38" y2="140" stroke="#2C2C2C" strokeWidth="2" strokeLinecap="round" />
           <line x1="85" y1="140" x2="92" y2="140" stroke="#2C2C2C" strokeWidth="2" strokeLinecap="round" />
-          {/* Arms */}
-          <line x1="25" y1="70" x2="10" y2="50" stroke="#2C2C2C" strokeWidth="2" strokeLinecap="round" />
-          <line x1="105" y1="70" x2="118" y2="55" stroke="#2C2C2C" strokeWidth="2" strokeLinecap="round" />
-          <circle cx="118" cy="55" r="3" fill="none" stroke="#2C2C2C" strokeWidth="1.5" />
+          {/* Arms — right arm waving */}
+          <line x1="25" y1="70" x2="12" y2="55" stroke="#2C2C2C" strokeWidth="2" strokeLinecap="round" />
+          <g style={{ animation: "wave 2s ease-in-out infinite", transformOrigin: "105px 70px" }}>
+            <line x1="105" y1="70" x2="120" y2="48" stroke="#2C2C2C" strokeWidth="2" strokeLinecap="round" />
+            <circle cx="120" cy="45" r="3.5" fill="var(--kreide)" stroke="#2C2C2C" strokeWidth="1.5" />
+          </g>
         </g>
       </svg>
     </div>

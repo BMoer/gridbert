@@ -12,30 +12,17 @@ import { ApiKeySetupModal } from "../Settings/ApiKeySetupModal";
 /** Human-readable tool labels for progress strip. */
 const TOOL_LABELS: Record<string, string> = {
   parse_invoice: "Rechnung analysieren",
-  fetch_smart_meter_data: "Smart Meter Daten laden",
   compare_tariffs: "Stromtarife vergleichen",
-  compare_beg_options: "BEG Optionen prüfen",
-  compare_gas_tariffs: "Gastarife vergleichen",
-  analyze_load_profile: "Lastprofil analysieren",
-  analyze_spot_tariff: "Spot-Tarif analysieren",
-  simulate_battery: "Batteriespeicher simulieren",
-  simulate_pv: "PV-Anlage simulieren",
-  monitor_energy_news: "Energie-News prüfen",
+  generate_savings_report: "Einspar-Report erstellen",
   update_user_memory: "Information merken",
   add_dashboard_widget: "Dashboard aktualisieren",
-  web_search: "Web-Suche",
+  get_user_file: "Datei laden",
 };
 
 /** Map task → dashboard route. */
 const TASK_ROUTES: { label: string; widgetTypes: string[]; route: string }[] = [
   { label: "Stromrechnung", widgetTypes: ["invoice_summary"], route: "/dashboard/invoice" },
-  { label: "Lastgang", widgetTypes: ["consumption_kpi", "consumption_chart"], route: "/dashboard/load_profile" },
   { label: "Tarifvergleich", widgetTypes: ["tariff_comparison"], route: "/dashboard/tariff" },
-  { label: "Speicher-Sim", widgetTypes: ["battery_sim"], route: "/dashboard/battery" },
-  { label: "PV-Anlage", widgetTypes: ["pv_sim"], route: "/dashboard/pv" },
-  { label: "Spot-Tarif", widgetTypes: ["spot_price"], route: "/dashboard/spot" },
-  { label: "Gastarife", widgetTypes: ["gas_comparison"], route: "/dashboard/gas" },
-  { label: "Energiegemeinschaft", widgetTypes: ["beg_comparison"], route: "/dashboard/beg" },
 ];
 
 function getProgressLabel(): string {
@@ -101,10 +88,6 @@ export function ChatPage() {
   const hasInvoice = userFiles.some(
     (f) => f.media_type === "application/pdf" || f.file_name.endsWith(".pdf"),
   );
-  const hasLoadProfile = userFiles.some(
-    (f) => f.file_name.endsWith(".csv") || f.file_name.endsWith(".xlsx") || f.file_name.endsWith(".xls"),
-  );
-
   const progressLabel = isLoading ? getProgressLabel() : "";
 
   return (
@@ -244,7 +227,7 @@ export function ChatPage() {
           </div>
 
           {/* File status */}
-          {(hasInvoice || hasLoadProfile) && (
+          {hasInvoice && (
             <div style={{ fontSize: "0.7rem", color: "var(--warm-grau)", fontFamily: "var(--font-mono)" }}>
               {userFiles.map((f) => (
                 <div key={f.id} style={{ marginBottom: "0.15rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -283,13 +266,34 @@ export function ChatPage() {
           <div style={{ flex: 1, overflowY: "auto", padding: "1rem 1.5rem" }}>
             {messages.length === 0 ? (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", textAlign: "center", gap: "1rem" }}>
-                <svg width="80" height="80" viewBox="0 0 130 130" style={{ opacity: 0.6 }}>
-                  <circle cx="65" cy="55" r="35" fill="var(--kreide)" stroke="var(--ink)" strokeWidth="2" />
-                  <circle cx="55" cy="48" r="4" fill="var(--ink)" />
-                  <circle cx="75" cy="48" r="4" fill="var(--ink)" />
-                  <path d="M52,62 Q65,72 78,62" stroke="var(--ink)" strokeWidth="2" fill="none" strokeLinecap="round" />
-                  <rect x="50" y="38" width="12" height="6" rx="2" fill="none" stroke="var(--ink)" strokeWidth="1.5" />
-                  <rect x="68" y="38" width="12" height="6" rx="2" fill="none" stroke="var(--ink)" strokeWidth="1.5" />
+                <svg width="80" height="100" viewBox="0 0 130 160" fill="none" style={{ opacity: 0.75 }}>
+                  {/* Body */}
+                  <rect x="25" y="30" width="80" height="80" rx="10" stroke="var(--ink)" strokeWidth="2.5" fill="var(--kreide)" />
+                  {/* Glasses */}
+                  <circle cx="50" cy="62" r="14" stroke="var(--ink)" strokeWidth="2" fill="none" />
+                  <circle cx="80" cy="62" r="14" stroke="var(--ink)" strokeWidth="2" fill="none" />
+                  <path d="M64,60 Q65,57 66,60" stroke="var(--ink)" strokeWidth="1.5" fill="none" />
+                  <line x1="36" y1="60" x2="25" y2="56" stroke="var(--ink)" strokeWidth="1.8" strokeLinecap="round" />
+                  <line x1="94" y1="60" x2="105" y2="56" stroke="var(--ink)" strokeWidth="1.8" strokeLinecap="round" />
+                  {/* Eyes */}
+                  <circle cx="50" cy="60" r="3.5" fill="var(--ink)" />
+                  <circle cx="80" cy="60" r="3.5" fill="var(--ink)" />
+                  <circle cx="51.5" cy="58.5" r="1.5" fill="var(--kreide)" />
+                  <circle cx="81.5" cy="58.5" r="1.5" fill="var(--kreide)" />
+                  {/* Cheeks */}
+                  <circle cx="42" cy="72" r="5" fill="var(--terracotta)" opacity="0.15" />
+                  <circle cx="88" cy="72" r="5" fill="var(--terracotta)" opacity="0.15" />
+                  {/* Smile */}
+                  <path d="M55,77 Q65,86 75,77" stroke="var(--ink)" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+                  {/* Bow-tie */}
+                  <polygon points="55,112 65,107 65,117" fill="var(--terracotta)" stroke="var(--ink)" strokeWidth="1" />
+                  <polygon points="75,112 65,107 65,117" fill="var(--terracotta)" stroke="var(--ink)" strokeWidth="1" />
+                  <circle cx="65" cy="112" r="2.5" fill="var(--ink)" />
+                  {/* Legs */}
+                  <line x1="50" y1="110" x2="45" y2="140" stroke="var(--ink)" strokeWidth="2" strokeLinecap="round" />
+                  <line x1="80" y1="110" x2="85" y2="140" stroke="var(--ink)" strokeWidth="2" strokeLinecap="round" />
+                  <line x1="45" y1="140" x2="38" y2="140" stroke="var(--ink)" strokeWidth="2" strokeLinecap="round" />
+                  <line x1="85" y1="140" x2="92" y2="140" stroke="var(--ink)" strokeWidth="2" strokeLinecap="round" />
                 </svg>
                 <div>
                   <div style={{ fontFamily: "var(--font-display)", fontSize: "1.25rem", fontWeight: 600, color: "var(--ink)", marginBottom: "0.3rem" }}>

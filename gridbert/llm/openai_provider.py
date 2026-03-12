@@ -8,11 +8,14 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import time
 from typing import Any
 
 from gridbert.llm.types import LLMContentBlock, LLMResponse, LLMTextBlock, LLMToolUseBlock
 
 log = logging.getLogger(__name__)
+
+_RETRY_DELAYS = (5, 15, 45)  # seconds — exponential backoff for 429s
 
 
 class OpenAIProvider:
@@ -63,7 +66,7 @@ class OpenAIProvider:
         if oai_tools:
             kwargs["tools"] = oai_tools
 
-        response = self._client.chat.completions.create(**kwargs)
+        response = self._completions_with_retry(**kwargs)
         choice = response.choices[0]
 
         blocks: list[LLMContentBlock] = []
@@ -80,6 +83,25 @@ class OpenAIProvider:
 
         stop = "tool_use" if choice.finish_reason == "tool_calls" else "end_turn"
         return LLMResponse(content=tuple(blocks), stop_reason=stop)
+
+    def _completions_with_retry(self, **kwargs: Any) -> Any:
+        """Call OpenAI API with exponential backoff on 429 rate limit errors."""
+        import openai
+
+        for attempt, delay in enumerate((*_RETRY_DELAYS, 0)):
+            try:
+                return self._client.chat.completions.create(**kwargs)
+            except openai.RateLimitError:
+                if delay == 0:
+                    raise
+                log.warning(
+                    "Rate limit (429), Versuch %d/%d — warte %ds",
+                    attempt + 1,
+                    len(_RETRY_DELAYS),
+                    delay,
+                )
+                time.sleep(delay)
+        raise RuntimeError("Retry exhausted")  # pragma: no cover
 
     def build_user_content(
         self,

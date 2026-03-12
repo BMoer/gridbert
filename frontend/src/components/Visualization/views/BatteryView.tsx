@@ -3,11 +3,24 @@ import { ViewHeader } from "./shared/ViewHeader";
 
 interface BatteryScenario {
   capacity_kwh?: number;
+  kapazitaet_kwh?: number;
   price_eur?: number;
+  preis_eur?: number;
   savings_eur?: number;
+  ersparnis_jahr_eur?: number;
   amortization_years?: number;
+  amortisation_jahre?: number;
   performance_kwh?: number;
+  eigenverbrauch_erhoehung_kwh?: number;
   self_consumption_pct?: number;
+  eigenverbrauch_anteil_pct?: number;
+}
+
+function v(scenario: BatteryScenario, ...keys: (keyof BatteryScenario)[]): number | undefined {
+  for (const k of keys) {
+    if (scenario[k] != null) return Number(scenario[k]);
+  }
+  return undefined;
 }
 
 interface Props {
@@ -28,8 +41,9 @@ export function BatteryView({ widget }: Props) {
     );
   }
 
-  const scenarios = (widget.config.scenarios ?? []) as BatteryScenario[];
-  const bestIdx = widget.config.best_idx as number | undefined;
+  // Accept both English and German container field names
+  const scenarios = (widget.config.scenarios ?? widget.config.szenarien ?? []) as BatteryScenario[];
+  const bestIdx = (widget.config.best_idx ?? widget.config.bestes_szenario_idx) as number | undefined;
 
   return (
     <div>
@@ -43,67 +57,75 @@ export function BatteryView({ widget }: Props) {
           marginTop: "1.25rem",
         }}
       >
-        {scenarios.map((s, i) => (
-          <div
-            key={i}
-            className="card"
-            style={{
-              padding: "1.25rem",
-              borderLeft: i === bestIdx ? "3px solid var(--gruen)" : undefined,
-              position: "relative",
-            }}
-          >
-            {i === bestIdx && (
-              <div
-                style={{
-                  position: "absolute",
-                  top: "0.5rem",
-                  right: "0.5rem",
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "0.65rem",
-                  background: "var(--gruen)",
-                  color: "white",
-                  padding: "0.1rem 0.4rem",
-                  borderRadius: "var(--radius-sm)",
-                  fontWeight: 600,
-                }}
-              >
-                EMPFOHLEN
+        {scenarios.map((s, i) => {
+          const cap = v(s, "capacity_kwh", "kapazitaet_kwh");
+          const price = v(s, "price_eur", "preis_eur");
+          const savings = v(s, "savings_eur", "ersparnis_jahr_eur");
+          const amort = v(s, "amortization_years", "amortisation_jahre");
+          const selfCons = v(s, "self_consumption_pct", "eigenverbrauch_anteil_pct");
+
+          return (
+            <div
+              key={i}
+              className="card"
+              style={{
+                padding: "1.25rem",
+                borderLeft: i === bestIdx ? "3px solid var(--gruen)" : undefined,
+                position: "relative",
+              }}
+            >
+              {i === bestIdx && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "0.5rem",
+                    right: "0.5rem",
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "0.65rem",
+                    background: "var(--gruen)",
+                    color: "white",
+                    padding: "0.1rem 0.4rem",
+                    borderRadius: "var(--radius-sm)",
+                    fontWeight: 600,
+                  }}
+                >
+                  EMPFOHLEN
+                </div>
+              )}
+
+              <div style={{ fontFamily: "var(--font-display)", fontSize: "1.1rem", fontWeight: 600, color: "var(--ink)", marginBottom: "0.75rem" }}>
+                {cap ?? "?"} kWh
               </div>
-            )}
 
-            <div style={{ fontFamily: "var(--font-display)", fontSize: "1.1rem", fontWeight: 600, color: "var(--ink)", marginBottom: "0.75rem" }}>
-              {s.capacity_kwh ?? "?"} kWh
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", fontSize: "0.85rem" }}>
+                {price != null && (
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ color: "var(--warm-grau)" }}>Investition</span>
+                    <span style={{ fontFamily: "var(--font-mono)", fontWeight: 500 }}>{price.toLocaleString("de-AT")} €</span>
+                  </div>
+                )}
+                {savings != null && (
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ color: "var(--warm-grau)" }}>Ersparnis/Jahr</span>
+                    <span style={{ fontFamily: "var(--font-mono)", fontWeight: 500, color: "var(--gruen)" }}>{savings.toFixed(0)} €</span>
+                  </div>
+                )}
+                {amort != null && (
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ color: "var(--warm-grau)" }}>Amortisation</span>
+                    <span style={{ fontFamily: "var(--font-mono)", fontWeight: 500 }}>{amort.toFixed(1)} Jahre</span>
+                  </div>
+                )}
+                {selfCons != null && (
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ color: "var(--warm-grau)" }}>Eigenverbrauch</span>
+                    <span style={{ fontFamily: "var(--font-mono)", fontWeight: 500 }}>{selfCons.toFixed(0)}%</span>
+                  </div>
+                )}
+              </div>
             </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", fontSize: "0.85rem" }}>
-              {s.price_eur != null && (
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span style={{ color: "var(--warm-grau)" }}>Investition</span>
-                  <span style={{ fontFamily: "var(--font-mono)", fontWeight: 500 }}>{s.price_eur.toLocaleString("de-AT")} €</span>
-                </div>
-              )}
-              {s.savings_eur != null && (
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span style={{ color: "var(--warm-grau)" }}>Ersparnis/Jahr</span>
-                  <span style={{ fontFamily: "var(--font-mono)", fontWeight: 500, color: "var(--gruen)" }}>{s.savings_eur.toFixed(0)} €</span>
-                </div>
-              )}
-              {s.amortization_years != null && (
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span style={{ color: "var(--warm-grau)" }}>Amortisation</span>
-                  <span style={{ fontFamily: "var(--font-mono)", fontWeight: 500 }}>{s.amortization_years.toFixed(1)} Jahre</span>
-                </div>
-              )}
-              {s.self_consumption_pct != null && (
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span style={{ color: "var(--warm-grau)" }}>Eigenverbrauch</span>
-                  <span style={{ fontFamily: "var(--font-mono)", fontWeight: 500 }}>{s.self_consumption_pct.toFixed(0)}%</span>
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

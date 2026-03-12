@@ -5,6 +5,14 @@ interface Props {
   widget?: Widget;
 }
 
+/** Pick the first non-null value from config under the given keys. */
+function pick(config: Record<string, unknown>, ...keys: string[]): number | null {
+  for (const key of keys) {
+    if (config[key] != null) return Number(config[key]);
+  }
+  return null;
+}
+
 /** Dedicated dashboard for PV/Balkonkraftwerk simulation results. */
 export function PVView({ widget }: Props) {
   if (!widget) {
@@ -21,14 +29,27 @@ export function PVView({ widget }: Props) {
 
   const config = widget.config;
 
+  // Accept both English and German field names (LLM may use either)
+  const yieldKwh = pick(config, "yield_kwh", "jahresertrag_kwh");
+  const selfConsumption = pick(config, "self_consumption_kwh", "eigenverbrauch_kwh");
+  const feedIn = pick(config, "feed_in_kwh", "einspeisung_kwh");
+  const investment = pick(config, "investment_eur", "investition_eur");
+  const subsidy = pick(config, "subsidy_eur", "foerderung_eur");
+  const savings = pick(config, "savings_eur", "ersparnis_jahr_eur", "ersparnis_eur");
+  const amortization = pick(config, "amortization_years", "amortisation_jahre");
+  const selfConsumptionPct = pick(config, "self_consumption_pct", "eigenverbrauch_anteil_pct");
+  const systemKwp = pick(config, "anlage_kwp", "system_kwp");
+  const recommendation = config.recommendation ?? config.empfehlung;
+
   const metrics: { label: string; value: string; unit: string; highlight?: boolean }[] = [
-    ...(config.yield_kwh != null ? [{ label: "Jahresertrag", value: String(Number(config.yield_kwh).toFixed(0)), unit: "kWh" }] : []),
-    ...(config.self_consumption_kwh != null ? [{ label: "Eigenverbrauch", value: String(Number(config.self_consumption_kwh).toFixed(0)), unit: "kWh" }] : []),
-    ...(config.feed_in_kwh != null ? [{ label: "Einspeisung", value: String(Number(config.feed_in_kwh).toFixed(0)), unit: "kWh" }] : []),
-    ...(config.investment_eur != null ? [{ label: "Investition", value: String(Number(config.investment_eur).toFixed(0)), unit: "€" }] : []),
-    ...(config.subsidy_eur != null ? [{ label: "Förderung", value: String(Number(config.subsidy_eur).toFixed(0)), unit: "€", highlight: true }] : []),
-    ...(config.savings_eur != null ? [{ label: "Ersparnis/Jahr", value: String(Number(config.savings_eur).toFixed(0)), unit: "€", highlight: true }] : []),
-    ...(config.amortization_years != null ? [{ label: "Amortisation", value: String(Number(config.amortization_years).toFixed(1)), unit: "Jahre" }] : []),
+    ...(systemKwp != null ? [{ label: "Anlagengröße", value: String(systemKwp.toFixed(1)), unit: "kWp" }] : []),
+    ...(yieldKwh != null ? [{ label: "Jahresertrag", value: String(yieldKwh.toFixed(0)), unit: "kWh" }] : []),
+    ...(selfConsumption != null ? [{ label: "Eigenverbrauch", value: String(selfConsumption.toFixed(0)), unit: `kWh${selfConsumptionPct != null ? ` (${selfConsumptionPct.toFixed(0)}%)` : ""}` }] : []),
+    ...(feedIn != null ? [{ label: "Einspeisung", value: String(feedIn.toFixed(0)), unit: "kWh" }] : []),
+    ...(investment != null ? [{ label: "Investition", value: String(investment.toFixed(0)), unit: "€" }] : []),
+    ...(subsidy != null ? [{ label: "Förderung", value: String(subsidy.toFixed(0)), unit: "€", highlight: true }] : []),
+    ...(savings != null ? [{ label: "Ersparnis/Jahr", value: String(savings.toFixed(0)), unit: "€", highlight: true }] : []),
+    ...(amortization != null ? [{ label: "Amortisation", value: String(amortization.toFixed(1)), unit: "Jahre" }] : []),
   ];
 
   return (
@@ -63,13 +84,13 @@ export function PVView({ widget }: Props) {
         ))}
       </div>
 
-      {config.recommendation != null && (
+      {recommendation != null && (
         <div className="card" style={{ marginTop: "1.25rem", padding: "1.25rem", borderLeft: "3px solid var(--solar-gelb)" }}>
           <div style={{ fontFamily: "var(--font-display)", fontSize: "0.9rem", fontWeight: 500, marginBottom: "0.5rem" }}>
             Empfehlung
           </div>
           <div style={{ fontFamily: "var(--font-body)", fontSize: "0.9rem", color: "var(--ink)", lineHeight: 1.5 }}>
-            {String(config.recommendation)}
+            {String(recommendation)}
           </div>
         </div>
       )}
