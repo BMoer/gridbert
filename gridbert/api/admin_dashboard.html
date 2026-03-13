@@ -228,8 +228,6 @@
 </div><!-- /dashboard -->
 
 <script>
-const params = new URLSearchParams(window.location.search);
-const LEGACY_TOKEN = params.get('token') || '';
 const BASE = window.location.pathname.replace('/dashboard', '');
 let JWT_TOKEN = sessionStorage.getItem('gridbert_admin_jwt') || '';
 
@@ -241,11 +239,7 @@ function getAuthHeaders() {
 
 async function api(path, opts = {}) {
   const headers = { ...getAuthHeaders(), ...(opts.headers || {}) };
-  let url = `${BASE}${path}`;
-  if (LEGACY_TOKEN && !JWT_TOKEN) {
-    const sep = url.includes('?') ? '&' : '?';
-    url += `${sep}token=${LEGACY_TOKEN}`;
-  }
+  const url = `${BASE}${path}`;
   const res = await fetch(url, { ...opts, headers });
   if (res.status === 401 || res.status === 403) {
     doLogout();
@@ -314,7 +308,7 @@ document.getElementById('login-email').addEventListener('keydown', (e) => {
 });
 
 // --- Auto-login check ---
-if (JWT_TOKEN || LEGACY_TOKEN) {
+if (JWT_TOKEN) {
   showDashboard();
 }
 

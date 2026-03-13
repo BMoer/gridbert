@@ -34,6 +34,8 @@ dependencies = [
     "markdown>=3.5",
     # Web search
     "duckduckgo-search>=7.0",
+    # Security
+    "defusedxml>=0.7",
 ]
 
 [project.optional-dependencies]

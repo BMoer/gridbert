@@ -9,7 +9,7 @@ import json
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 
 from gridbert.api.deps import CurrentUserId, DbConn
@@ -18,10 +18,24 @@ from gridbert.storage.schema import dashboard_widgets
 router = APIRouter()
 
 
+_VALID_WIDGET_TYPES = {
+    "invoice_summary", "savings_summary", "tariff_comparison",
+    "consumption_chart", "consumption_kpi", "spot_price",
+    "battery_sim", "pv_sim", "gas_comparison", "beg_comparison",
+}
+
+
 class WidgetCreateRequest(BaseModel):
     widget_type: str
     position: int = 0
     config: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("widget_type")
+    @classmethod
+    def check_widget_type(cls, v: str) -> str:
+        if v not in _VALID_WIDGET_TYPES:
+            raise ValueError(f"Ungültiger Widget-Typ: {v}")
+        return v
 
 
 class WidgetResponse(BaseModel):

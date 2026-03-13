@@ -10,6 +10,11 @@ from sqlalchemy import Connection, select
 from gridbert.storage.schema import user_memory
 
 
+_MAX_KEY_LEN = 64
+_MAX_VALUE_LEN = 512
+_MAX_FACTS_PER_USER = 50
+
+
 def upsert_memory(
     conn: Connection,
     user_id: int,
@@ -18,6 +23,8 @@ def upsert_memory(
     source: str = "",
 ) -> None:
     """Fakt speichern oder aktualisieren (Upsert auf user_id + fact_key)."""
+    fact_key = fact_key[:_MAX_KEY_LEN]
+    fact_value = fact_value[:_MAX_VALUE_LEN]
     existing = conn.execute(
         select(user_memory).where(
             user_memory.c.user_id == user_id,
@@ -32,6 +39,14 @@ def upsert_memory(
             .values(fact_value=fact_value, source=source)
         )
     else:
+        # Enforce per-user fact count limit
+        from sqlalchemy import func
+
+        count = conn.execute(
+            select(func.count()).where(user_memory.c.user_id == user_id)
+        ).scalar() or 0
+        if count >= _MAX_FACTS_PER_USER:
+            return  # silently skip — context budget protection
         conn.execute(
             user_memory.insert().values(
                 user_id=user_id,

@@ -13,7 +13,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from gridbert.agent.loop import GridbertAgent
 from gridbert.agent.tool_registry import build_core_registry
@@ -46,17 +46,33 @@ _API_KEY_NUDGE = (
 )
 
 
+_ALLOWED_MEDIA_TYPES = {
+    "application/pdf", "image/jpeg", "image/png", "image/webp", "image/gif",
+    "text/csv", "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+}
+_MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024  # 10 MB base64
+_MAX_ATTACHMENTS = 5
+
+
 class AttachmentData(BaseModel):
     type: str = "document"  # "image" or "document"
     media_type: str = "application/pdf"
-    file_name: str = ""
-    data: str = ""  # base64
+    file_name: str = Field(default="", max_length=255)
+    data: str = Field(default="", max_length=_MAX_ATTACHMENT_SIZE)
+
+    @field_validator("media_type")
+    @classmethod
+    def check_media_type(cls, v: str) -> str:
+        if v and v not in _ALLOWED_MEDIA_TYPES:
+            raise ValueError(f"Nicht unterstützter Dateityp: {v}")
+        return v
 
 
 class ChatRequest(BaseModel):
-    message: str
+    message: str = Field(max_length=50_000)
     conversation_id: int | None = None
-    attachments: list[AttachmentData] | None = None
+    attachments: list[AttachmentData] | None = Field(default=None, max_length=_MAX_ATTACHMENTS)
 
 
 class ChatStartResponse(BaseModel):
@@ -109,6 +125,21 @@ def chat(
     conversation_id = req.conversation_id
     if conversation_id is None:
         conversation_id = create_conversation(conn, user_id, title=req.message[:80])
+    else:
+        # Ownership check: verify conversation belongs to this user
+        from gridbert.storage.schema import conversations as conv_table
+
+        conv = conn.execute(
+            select(conv_table.c.id).where(
+                conv_table.c.id == conversation_id,
+                conv_table.c.user_id == user_id,
+            )
+        ).first()
+        if conv is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Kein Zugriff auf diese Conversation",
+            )
 
     # User-Nachricht persistieren
     add_message(conn, conversation_id, role="user", content=req.message)
@@ -168,11 +199,11 @@ def chat(
                     attachments=agent_attachments,
                 )
                 final_text_holder.append(result)
-            except Exception as exc:
+            except Exception:
                 log.exception("Agent-Fehler")
                 event_queue.put(AgentEvent(
                     type=EventType.ERROR,
-                    data={"message": str(exc)},
+                    data={"message": "Ein interner Fehler ist aufgetreten. Bitte versuche es erneut."},
                 ))
             finally:
                 event_queue.put(None)  # Sentinel: Stream beenden
@@ -274,6 +305,20 @@ def list_messages(
     conn: DbConn,
 ) -> list[dict[str, Any]]:
     """Messages einer Conversation laden."""
+    # Ownership check: verify conversation belongs to this user
+    from gridbert.storage.schema import conversations as conv_table
+
+    conv = conn.execute(
+        select(conv_table.c.id).where(
+            conv_table.c.id == conversation_id,
+            conv_table.c.user_id == user_id,
+        )
+    ).first()
+    if conv is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation nicht gefunden",
+        )
     return get_messages(conn, conversation_id)
 
 

@@ -10,14 +10,14 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Header, HTTPException, Query, status
+from fastapi import APIRouter, Header, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse
 from jose import JWTError, jwt
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import desc, func, select
 
 from gridbert.api.deps import DbConn, JWT_ALGORITHM
-from gridbert.config import ADMIN_TOKEN, SECRET_KEY
+from gridbert.config import SECRET_KEY
 from gridbert.storage.schema import (
     analyses,
     conversations,
@@ -39,30 +39,24 @@ _DASHBOARD_HTML = (
 
 def _verify_admin(
     conn: Any,
-    token: str | None = None,
     authorization: str | None = None,
 ) -> int:
-    """Verify admin access via JWT Bearer or legacy token. Returns admin user_id."""
-    # Try JWT first
-    if authorization and authorization.startswith("Bearer "):
-        jwt_token = authorization[7:]
-        try:
-            payload = jwt.decode(jwt_token, SECRET_KEY, algorithms=[JWT_ALGORITHM])
-            user_id = int(payload["sub"])
-            user = conn.execute(
-                select(users.c.id, users.c.is_admin).where(users.c.id == user_id)
-            ).mappings().first()
-            if user and user.get("is_admin"):
-                return user_id
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Kein Admin-Zugriff")
-        except (JWTError, KeyError, ValueError) as exc:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Ungueltiger Token") from exc
+    """Verify admin access via JWT Bearer header. Returns admin user_id."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authorization header required")
 
-    # Fall back to legacy ADMIN_TOKEN
-    if token and ADMIN_TOKEN and token == ADMIN_TOKEN:
-        return 0  # legacy mode, no user_id
-
-    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unauthorized")
+    jwt_token = authorization[7:]
+    try:
+        payload = jwt.decode(jwt_token, SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload["sub"])
+        user = conn.execute(
+            select(users.c.id, users.c.is_admin).where(users.c.id == user_id)
+        ).mappings().first()
+        if user and user.get("is_admin"):
+            return user_id
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Kein Admin-Zugriff")
+    except (JWTError, KeyError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Ungueltiger Token") from exc
 
 
 # --- Admin Login --------------------------------------------------------------
@@ -73,8 +67,11 @@ class AdminLoginRequest(BaseModel):
 
 
 @router.post("/login")
-def admin_login(req: AdminLoginRequest, conn: DbConn) -> dict[str, Any]:
+def admin_login(req: AdminLoginRequest, conn: DbConn, request: Request) -> dict[str, Any]:
     """Login as admin — returns JWT if user has is_admin flag."""
+    from gridbert.api.rate_limit import check_login_rate_limit
+    check_login_rate_limit(request.client.host if request.client else "unknown")
+
     import bcrypt
 
     from gridbert.config import ACCESS_TOKEN_EXPIRE_MINUTES
@@ -113,7 +110,7 @@ def admin_login(req: AdminLoginRequest, conn: DbConn) -> dict[str, Any]:
 # --- Dashboard HTML -----------------------------------------------------------
 
 @router.get("/dashboard", response_class=HTMLResponse)
-def admin_dashboard(token: str = Query(None)) -> HTMLResponse:
+def admin_dashboard() -> HTMLResponse:
     """Serve admin dashboard HTML — auth happens in the JS via API calls."""
     return HTMLResponse(_DASHBOARD_HTML)
 
@@ -123,11 +120,10 @@ def admin_dashboard(token: str = Query(None)) -> HTMLResponse:
 @router.get("/overview")
 def admin_overview(
     conn: DbConn,
-    token: str = Query(None),
     authorization: str | None = Header(None),
 ) -> dict[str, Any]:
     """High-level stats: user count, funnel metrics, per-user details."""
-    _verify_admin(conn, token, authorization)
+    _verify_admin(conn, authorization)
     import json as _json
 
     from gridbert.storage.schema import api_usage, registration_allowlist, waitlist
@@ -242,12 +238,11 @@ def admin_overview(
 @router.get("/activity")
 def admin_activity(
     conn: DbConn,
-    token: str = Query(None),
     authorization: str | None = Header(None),
     limit: int = Query(50, le=200),
 ) -> list[dict[str, Any]]:
     """Recent messages across all users (newest first)."""
-    _verify_admin(conn, token, authorization)
+    _verify_admin(conn, authorization)
 
     rows = conn.execute(
         select(
@@ -292,11 +287,10 @@ class AllowlistAddRequest(BaseModel):
 @router.get("/allowlist")
 def admin_list_allowlist(
     conn: DbConn,
-    token: str = Query(None),
     authorization: str | None = Header(None),
 ) -> list[dict[str, Any]]:
     """List all allowed registration emails from DB."""
-    _verify_admin(conn, token, authorization)
+    _verify_admin(conn, authorization)
     from gridbert.storage.repositories.allowlist_repo import list_allowed_emails
 
     entries = list_allowed_emails(conn)
@@ -315,11 +309,10 @@ def admin_list_allowlist(
 def admin_add_to_allowlist(
     req: AllowlistAddRequest,
     conn: DbConn,
-    token: str = Query(None),
     authorization: str | None = Header(None),
 ) -> dict[str, Any]:
     """Add email to registration allowlist."""
-    _verify_admin(conn, token, authorization)
+    _verify_admin(conn, authorization)
     from gridbert.storage.repositories.allowlist_repo import add_allowed_email, is_email_allowed
 
     if is_email_allowed(conn, req.email):
@@ -344,11 +337,10 @@ def admin_add_to_allowlist(
 def admin_delete_user(
     user_id: int,
     conn: DbConn,
-    token: str = Query(None),
     authorization: str | None = Header(None),
 ) -> dict[str, Any]:
     """Delete a user and all associated data (cascading)."""
-    _verify_admin(conn, token, authorization)
+    _verify_admin(conn, authorization)
 
     # Verify user exists
     user = conn.execute(select(users).where(users.c.id == user_id)).mappings().first()
@@ -384,11 +376,10 @@ def admin_delete_user(
 def admin_remove_from_allowlist(
     conn: DbConn,
     email: str = Query(...),
-    token: str = Query(None),
     authorization: str | None = Header(None),
 ) -> dict[str, Any]:
     """Remove email from registration allowlist."""
-    _verify_admin(conn, token, authorization)
+    _verify_admin(conn, authorization)
     from gridbert.storage.repositories.allowlist_repo import remove_allowed_email
 
     removed = remove_allowed_email(conn, email)
@@ -430,11 +421,10 @@ def admin_remove_from_allowlist(
 @router.get("/waitlist")
 def admin_list_waitlist(
     conn: DbConn,
-    token: str = Query(None),
     authorization: str | None = Header(None),
 ) -> list[dict[str, Any]]:
     """List all waitlist signups with allowlist status."""
-    _verify_admin(conn, token, authorization)
+    _verify_admin(conn, authorization)
     from gridbert.storage.schema import registration_allowlist, waitlist
 
     rows = conn.execute(
@@ -461,11 +451,10 @@ def admin_list_waitlist(
 @router.delete("/waitlist/clear")
 def admin_clear_waitlist(
     conn: DbConn,
-    token: str = Query(None),
     authorization: str | None = Header(None),
 ) -> dict[str, Any]:
     """Delete all waitlist entries."""
-    _verify_admin(conn, token, authorization)
+    _verify_admin(conn, authorization)
     from gridbert.storage.schema import waitlist
 
     count = conn.execute(select(func.count()).select_from(waitlist)).scalar()
@@ -478,11 +467,10 @@ def admin_clear_waitlist(
 def admin_delete_waitlist_entry(
     entry_id: int,
     conn: DbConn,
-    token: str = Query(None),
     authorization: str | None = Header(None),
 ) -> dict[str, Any]:
     """Delete a single waitlist entry."""
-    _verify_admin(conn, token, authorization)
+    _verify_admin(conn, authorization)
     from gridbert.storage.schema import waitlist
 
     row = conn.execute(
@@ -507,11 +495,10 @@ class WaitlistImportRequest(BaseModel):
 def admin_import_waitlist_from_screenshot(
     req: WaitlistImportRequest,
     conn: DbConn,
-    token: str = Query(None),
     authorization: str | None = Header(None),
 ) -> dict[str, Any]:
     """Extract emails from a screenshot via Claude Vision, import into waitlist."""
-    _verify_admin(conn, token, authorization)
+    _verify_admin(conn, authorization)
     import re
 
     import anthropic
@@ -614,11 +601,10 @@ def admin_import_waitlist_from_screenshot(
 def admin_send_nudge_to_user(
     user_id: int,
     conn: DbConn,
-    token: str = Query(None),
     authorization: str | None = Header(None),
 ) -> dict[str, Any]:
     """Send feedback nudge to a specific user and record timestamp."""
-    _verify_admin(conn, token, authorization)
+    _verify_admin(conn, authorization)
     from datetime import datetime, timezone
 
     from gridbert.email import send_email
@@ -644,11 +630,10 @@ def admin_send_nudge_to_user(
 @router.get("/summary")
 def admin_summary(
     conn: DbConn,
-    token: str = Query(None),
     authorization: str | None = Header(None),
 ) -> dict[str, Any]:
     """AI-powered activity summary since last admin login."""
-    admin_user_id = _verify_admin(conn, token, authorization)
+    admin_user_id = _verify_admin(conn, authorization)
 
     from gridbert.storage.schema import api_usage, registration_allowlist, waitlist
 

@@ -29,7 +29,13 @@ OLLAMA_VISION_MODEL: str = os.getenv("OLLAMA_VISION_MODEL", "qwen2.5vl:7b")
 DATABASE_URL: str = os.getenv("DATABASE_URL", f"sqlite:///{Path.home() / '.gridbert' / 'gridbert.db'}")
 
 # --- Auth ---------------------------------------------------------------------
-SECRET_KEY: str = os.getenv("SECRET_KEY", "gridbert-dev-secret-change-in-production")
+_DEFAULT_SECRET = "gridbert-dev-secret-change-in-production"
+SECRET_KEY: str = os.getenv("SECRET_KEY", _DEFAULT_SECRET)
+if ENVIRONMENT != "development" and SECRET_KEY == _DEFAULT_SECRET:
+    raise RuntimeError(
+        "SECRET_KEY must be set in production. "
+        "Generate one with: python3 -c \"import secrets; print(secrets.token_urlsafe(32))\""
+    )
 ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))  # 24h
 
 # --- CORS (for React frontend) ------------------------------------------------

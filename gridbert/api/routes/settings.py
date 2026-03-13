@@ -130,8 +130,8 @@ def set_llm_config(
         log.warning("API key validation failed for user %d: %s", user_id, exc)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"API-Key ungültig: {exc}",
-        )
+            detail="API-Key ungültig oder nicht erreichbar. Bitte Schlüssel und Provider prüfen.",
+        ) from exc
 
     encrypted = encrypt_value(req.api_key)
     set_user_llm_config(conn, user_id, req.provider, encrypted, model)

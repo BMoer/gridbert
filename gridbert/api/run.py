@@ -10,15 +10,18 @@ import logging
 
 def main() -> None:
     """API Server starten."""
+    import os
+
     import uvicorn
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(name)s | %(message)s")
+    is_dev = os.getenv("ENVIRONMENT", "production") == "development"
     uvicorn.run(
         "gridbert.api.app:create_app",
         factory=True,
         host="0.0.0.0",
         port=8000,
-        reload=True,
+        reload=is_dev,
     )
 
 

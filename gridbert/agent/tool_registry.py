@@ -66,8 +66,8 @@ class ToolRegistry:
                 return result.model_dump_json(indent=2)
             return str(result)
         except Exception as e:
-            log.error("Tool %s fehlgeschlagen: %s", name, e)
-            return f"Fehler bei {name}: {e}"
+            log.exception("Tool %s fehlgeschlagen: %s", name, e)
+            return f"Fehler bei {name}: Das Tool konnte nicht ausgeführt werden."
 
     @property
     def tool_names(self) -> list[str]:
@@ -91,24 +91,41 @@ def build_default_registry(
     # --- Invoice Parser -------------------------------------------------------
     from gridbert.tools.invoice_parser import parse_invoice
 
+    def _safe_parse_invoice(file_id: int | str) -> Any:
+        """Parse invoice with path containment — resolves file_id from user's files."""
+        from pathlib import Path
+
+        from gridbert.config import UPLOAD_DIR
+        from gridbert.storage.repositories.file_repo import read_file_content
+
+        if db_conn is None or user_id is None:
+            return "Fehler: Kein User-Kontext für Dateizugriff."
+        result = read_file_content(db_conn, user_id, int(file_id))
+        if result is None:
+            return "Fehler: Datei nicht gefunden oder kein Zugriff."
+        _raw_bytes, file_meta = result
+        full_path = Path(UPLOAD_DIR) / file_meta["disk_path"]
+        return parse_invoice(str(full_path), llm_provider=llm_provider)
+
     registry.register(
         name="parse_invoice",
         description=(
             "Analysiere eine Stromrechnung (PDF oder Bild). "
             "Extrahiert Lieferant, Tarif, Energiepreis, Grundgebühr, "
-            "Jahresverbrauch, PLZ und Zählpunkt."
+            "Jahresverbrauch, PLZ und Zählpunkt. "
+            "Verwende die file_id aus der Dateiliste des Users."
         ),
         input_schema={
             "type": "object",
             "properties": {
-                "file_path": {
-                    "type": "string",
-                    "description": "Pfad zur hochgeladenen Rechnungsdatei",
+                "file_id": {
+                    "type": "integer",
+                    "description": "ID der hochgeladenen Rechnungsdatei (aus der Dateiliste des Users)",
                 },
             },
-            "required": ["file_path"],
+            "required": ["file_id"],
         },
-        handler=lambda file_path: parse_invoice(file_path, llm_provider=llm_provider),
+        handler=_safe_parse_invoice,
     )
 
     # --- Smart Meter (Multi-Provider) -----------------------------------------

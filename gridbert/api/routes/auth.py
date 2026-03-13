@@ -8,9 +8,9 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from jose import jwt
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 from gridbert.api.deps import CurrentUser, DbConn, JWT_ALGORITHM
 from gridbert.config import ACCESS_TOKEN_EXPIRE_MINUTES, SECRET_KEY
@@ -32,13 +32,13 @@ def _verify_password(password: str, hashed: str) -> bool:
 
 class RegisterRequest(BaseModel):
     email: EmailStr
-    password: str
-    name: str = ""
+    password: str = Field(min_length=8, max_length=128)
+    name: str = Field(default="", max_length=256)
 
 
 class LoginRequest(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(max_length=128)
 
 
 class TokenResponse(BaseModel):
@@ -63,8 +63,11 @@ def _create_token(user_id: int) -> str:
 
 
 @router.post("/register", response_model=TokenResponse)
-def register(req: RegisterRequest, conn: DbConn) -> TokenResponse:
+def register(req: RegisterRequest, conn: DbConn, request: Request) -> TokenResponse:
     """Neuen User registrieren."""
+    from gridbert.api.rate_limit import check_register_rate_limit
+    check_register_rate_limit(request.client.host if request.client else "unknown")
+
     from gridbert.storage.repositories.allowlist_repo import is_email_allowed, list_allowed_emails
 
     # Allowlist: DB is the source of truth (env var is seeded into DB on startup).
@@ -111,8 +114,10 @@ def register(req: RegisterRequest, conn: DbConn) -> TokenResponse:
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(req: LoginRequest, conn: DbConn) -> TokenResponse:
+def login(req: LoginRequest, conn: DbConn, request: Request) -> TokenResponse:
     """Login mit E-Mail und Passwort."""
+    from gridbert.api.rate_limit import check_login_rate_limit
+    check_login_rate_limit(request.client.host if request.client else "unknown")
     user = get_user_by_email(conn, req.email)
     if user is None or not _verify_password(req.password, user["password_hash"]):
         raise HTTPException(

@@ -14,5 +14,15 @@ build/
 rechnung*.pdf
 *.pdf
 
+# Datenbanken
+*.db
+*.sqlite
+*.db-shm
+*.db-wal
+
+# Uploads / Daten
+data/
+uploads/
+
 # Claude Code Arbeitsverzeichnis
 .claude/
