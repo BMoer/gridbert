@@ -65,9 +65,11 @@ def _create_token(user_id: int) -> str:
 @router.post("/register", response_model=TokenResponse)
 def register(req: RegisterRequest, conn: DbConn) -> TokenResponse:
     """Neuen User registrieren."""
-    from gridbert.config import REGISTRATION_ALLOWLIST
+    from gridbert.storage.repositories.allowlist_repo import is_email_allowed, list_allowed_emails
 
-    if REGISTRATION_ALLOWLIST and req.email.lower() not in REGISTRATION_ALLOWLIST:
+    # Allowlist: DB is the source of truth (env var is seeded into DB on startup).
+    # If DB allowlist is empty → open registration. Otherwise, email must be in DB.
+    if list_allowed_emails(conn) and not is_email_allowed(conn, req.email):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Registrierung ist derzeit nur auf Einladung möglich. "

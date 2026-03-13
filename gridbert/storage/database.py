@@ -47,6 +47,7 @@ def init_db() -> None:
 
     metadata.create_all(_engine)
     _migrate_add_llm_columns(_engine)
+    _seed_allowlist_from_env(_engine)
     log.info("Datenbank initialisiert: %s", DATABASE_URL)
 
 
@@ -68,4 +69,28 @@ def _migrate_add_llm_columns(engine) -> None:
                     f"ALTER TABLE users ADD COLUMN {col_name} {col_type} DEFAULT {default}"
                 ))
                 log.info("Migration: Added column users.%s", col_name)
+        conn.commit()
+
+
+def _seed_allowlist_from_env(engine) -> None:
+    """Copy REGISTRATION_ALLOWLIST env var entries into DB (idempotent)."""
+    from gridbert.config import REGISTRATION_ALLOWLIST
+    from gridbert.storage.schema import registration_allowlist
+
+    if not REGISTRATION_ALLOWLIST:
+        return
+
+    with engine.connect() as conn:
+        for email in REGISTRATION_ALLOWLIST:
+            existing = conn.execute(
+                text("SELECT id FROM registration_allowlist WHERE email = :email"),
+                {"email": email},
+            ).first()
+            if not existing:
+                conn.execute(
+                    registration_allowlist.insert().values(
+                        email=email, added_by="env_seed"
+                    )
+                )
+                log.info("Allowlist seed: %s", email)
         conn.commit()

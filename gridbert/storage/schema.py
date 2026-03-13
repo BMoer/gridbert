@@ -105,6 +105,17 @@ uploaded_files = Table(
     Column("created_at", DateTime, server_default=func.now()),
 )
 
+# --- Registration Allowlist ---------------------------------------------------
+
+registration_allowlist = Table(
+    "registration_allowlist",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("email", String, unique=True, nullable=False),
+    Column("added_by", String, default="admin"),
+    Column("created_at", DateTime, server_default=func.now()),
+)
+
 # --- Dashboard Widgets --------------------------------------------------------
 
 dashboard_widgets = Table(

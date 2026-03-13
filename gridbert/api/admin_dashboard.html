@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gridbert Admin</title>
+<style>
+  :root {
+    --bone: #f5f0e8; --ink: #2c2c2c; --terracotta: #c4633f;
+    --kreide: #faf8f4; --warm-grau: #a89f91; --green: #4a8c5c; --red: #c44040;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Source Serif 4', Georgia, serif;
+    background: var(--bone); color: var(--ink);
+    max-width: 1100px; margin: 0 auto; padding: 24px;
+  }
+  h1 { font-family: 'Fraunces', serif; font-size: 1.8rem; margin-bottom: 4px; }
+  h2 { font-family: 'Fraunces', serif; font-size: 1.2rem; margin: 24px 0 12px; color: var(--terracotta); }
+  .subtitle { color: var(--warm-grau); font-size: 0.9rem; margin-bottom: 20px; }
+  .kpi-row { display: flex; gap: 16px; margin-bottom: 24px; }
+  .kpi {
+    background: var(--kreide); border-radius: 10px; padding: 16px 24px;
+    flex: 1; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .kpi-value { font-family: 'JetBrains Mono', monospace; font-size: 2rem; font-weight: 600; color: var(--terracotta); }
+  .kpi-label { font-size: 0.85rem; color: var(--warm-grau); margin-top: 4px; }
+  table { width: 100%; border-collapse: collapse; background: var(--kreide); border-radius: 10px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  th { background: var(--ink); color: var(--kreide); text-align: left; padding: 10px 14px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--bone); font-size: 0.9rem; }
+  tr:last-child td { border-bottom: none; }
+  .role-user { color: var(--terracotta); font-weight: 600; }
+  .role-assistant { color: var(--green); font-weight: 600; }
+  .content-cell { max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+  .content-cell.expanded { white-space: normal; word-break: break-word; }
+  .mono { font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; }
+  /* Allowlist */
+  .allowlist-panel { background: var(--kreide); border-radius: 10px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .add-form { display: flex; gap: 8px; margin-bottom: 16px; }
+  .add-form input {
+    flex: 1; padding: 8px 12px; border: 1px solid var(--warm-grau); border-radius: 6px;
+    font-family: inherit; font-size: 0.9rem;
+  }
+  .btn {
+    padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer;
+    font-family: inherit; font-size: 0.85rem; font-weight: 600;
+  }
+  .btn-add { background: var(--terracotta); color: white; }
+  .btn-add:hover { opacity: 0.9; }
+  .btn-remove { background: none; color: var(--red); border: 1px solid var(--red); padding: 4px 10px; font-size: 0.8rem; }
+  .btn-remove:hover { background: var(--red); color: white; }
+  .btn-refresh { background: var(--ink); color: var(--kreide); }
+  .header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+  .status-msg { padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; font-size: 0.85rem; display: none; }
+  .status-ok { background: #e8f5e9; color: var(--green); display: block; }
+  .status-err { background: #fde8e8; color: var(--red); display: block; }
+  @media (max-width: 600px) { .kpi-row { flex-direction: column; } }
+</style>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;700&family=Source+Serif+4:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<div class="header-row">
+  <div>
+    <h1>Gridbert Admin</h1>
+    <div class="subtitle">Usage Analytics & Allowlist Management</div>
+  </div>
+  <button class="btn btn-refresh" onclick="loadAll()">Aktualisieren</button>
+</div>
+
+<!-- KPIs -->
+<div class="kpi-row">
+  <div class="kpi"><div class="kpi-value" id="kpi-users">-</div><div class="kpi-label">Users</div></div>
+  <div class="kpi"><div class="kpi-value" id="kpi-messages">-</div><div class="kpi-label">Messages</div></div>
+  <div class="kpi"><div class="kpi-value" id="kpi-conversations">-</div><div class="kpi-label">Conversations</div></div>
+</div>
+
+<!-- Users -->
+<h2>Users</h2>
+<table><thead><tr><th>Email</th><th>Name</th><th>Messages</th><th>Seit</th></tr></thead><tbody id="users-body"></tbody></table>
+
+<!-- Allowlist -->
+<h2>Registration Allowlist</h2>
+<div class="allowlist-panel">
+  <div id="allowlist-status" class="status-msg"></div>
+  <div class="add-form">
+    <input type="email" id="new-email" placeholder="email@example.com" />
+    <button class="btn btn-add" onclick="addEmail()">Hinzufuegen</button>
+  </div>
+  <table><thead><tr><th>Email</th><th>Hinzugefuegt von</th><th>Datum</th><th></th></tr></thead><tbody id="allowlist-body"></tbody></table>
+</div>
+
+<!-- Activity -->
+<h2>Letzte Aktivitaet</h2>
+<table><thead><tr><th>Zeit</th><th>User</th><th>Rolle</th><th>Inhalt</th><th>Tool</th></tr></thead><tbody id="activity-body"></tbody></table>
+
+<script>
+const params = new URLSearchParams(window.location.search);
+const TOKEN = params.get('token') || '';
+const BASE = window.location.pathname.replace('/dashboard', '');
+
+async function api(path, opts = {}) {
+  const sep = path.includes('?') ? '&' : '?';
+  const res = await fetch(`${BASE}${path}${sep}token=${TOKEN}`, opts);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function fmtDate(s) {
+  if (!s) return '-';
+  const d = new Date(s + 'Z');
+  return d.toLocaleDateString('de-AT') + ' ' + d.toLocaleTimeString('de-AT', {hour:'2-digit',minute:'2-digit'});
+}
+
+async function loadOverview() {
+  const d = await api('/overview');
+  document.getElementById('kpi-users').textContent = d.total_users;
+  document.getElementById('kpi-messages').textContent = d.total_messages;
+  document.getElementById('kpi-conversations').textContent = d.total_conversations;
+  const tbody = document.getElementById('users-body');
+  tbody.innerHTML = d.users.map(u => `<tr>
+    <td class="mono">${esc(u.email)}</td>
+    <td>${esc(u.name || '-')}</td>
+    <td class="mono">${u.message_count}</td>
+    <td>${fmtDate(u.created_at)}</td>
+  </tr>`).join('');
+}
+
+async function loadActivity() {
+  const rows = await api('/activity?limit=100');
+  const tbody = document.getElementById('activity-body');
+  tbody.innerHTML = rows.map(r => `<tr>
+    <td style="white-space:nowrap">${fmtDate(r.created_at)}</td>
+    <td class="mono">${esc(r.user_email)}</td>
+    <td class="${r.role === 'user' ? 'role-user' : 'role-assistant'}">${r.role}</td>
+    <td class="content-cell" onclick="this.classList.toggle('expanded')">${esc(r.content)}</td>
+    <td class="mono">${esc(r.tool_name || '')}</td>
+  </tr>`).join('');
+}
+
+async function loadAllowlist() {
+  const entries = await api('/allowlist');
+  const tbody = document.getElementById('allowlist-body');
+  tbody.innerHTML = entries.map(e => `<tr>
+    <td class="mono">${esc(e.email)}</td>
+    <td>${esc(e.added_by || '-')}</td>
+    <td>${fmtDate(e.created_at)}</td>
+    <td><button class="btn btn-remove" onclick="removeEmail('${esc(e.email)}')">Entfernen</button></td>
+  </tr>`).join('');
+}
+
+async function addEmail() {
+  const input = document.getElementById('new-email');
+  const email = input.value.trim();
+  if (!email) return;
+  const st = document.getElementById('allowlist-status');
+  try {
+    await api('/allowlist', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({email}) });
+    st.className = 'status-msg status-ok';
+    st.textContent = `${email} hinzugefuegt`;
+    input.value = '';
+    loadAllowlist();
+  } catch (e) {
+    st.className = 'status-msg status-err';
+    st.textContent = e.message;
+  }
+  setTimeout(() => st.className = 'status-msg', 3000);
+}
+
+async function removeEmail(email) {
+  if (!confirm(`${email} wirklich entfernen?`)) return;
+  const st = document.getElementById('allowlist-status');
+  try {
+    await api(`/allowlist?email=${encodeURIComponent(email)}`, { method: 'DELETE' });
+    st.className = 'status-msg status-ok';
+    st.textContent = `${email} entfernt`;
+    loadAllowlist();
+  } catch (e) {
+    st.className = 'status-msg status-err';
+    st.textContent = e.message;
+  }
+  setTimeout(() => st.className = 'status-msg', 3000);
+}
+
+function loadAll() { loadOverview(); loadActivity(); loadAllowlist(); }
+loadAll();
+setInterval(loadAll, 60000);
+</script>
+</body>
+</html>
