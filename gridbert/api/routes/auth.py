@@ -85,6 +85,15 @@ def register(req: RegisterRequest, conn: DbConn) -> TokenResponse:
 
     password_hash = _hash_password(req.password)
     user_id = create_user(conn, email=req.email, password_hash=password_hash, name=req.name)
+
+    # Auto-promote to admin if email is in ADMIN_EMAILS
+    from gridbert.config import ADMIN_EMAILS
+    from gridbert.storage.schema import users
+
+    if req.email.lower() in ADMIN_EMAILS:
+        conn.execute(users.update().where(users.c.id == user_id).values(is_admin=1))
+        conn.commit()
+
     token = _create_token(user_id)
 
     # Fire-and-forget welcome email

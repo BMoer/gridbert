@@ -500,7 +500,7 @@ async function loadWaitlist() {
     <td>${fmtDate(w.created_at)}</td>
     <td>${w.is_allowed
       ? '<button class="btn" style="font-size:0.75rem;padding:4px 10px;background:none;color:var(--warm-grau);border:1px solid var(--warm-grau);cursor:default;" disabled>Bereits freigeschaltet</button>'
-      : \`<button class="btn btn-add" style="font-size:0.75rem;padding:4px 10px;" onclick="promoteToAllowlist('\${esc(w.email)}')">Freigeben</button>\`}
+      : '<button class="btn btn-add" style="font-size:0.75rem;padding:4px 10px;" onclick="promoteToAllowlist(\'' + esc(w.email) + '\')">Freigeben</button>'}
       <button class="btn btn-remove" style="font-size:0.75rem;margin-left:4px;" onclick="deleteWaitlistEntry(${w.id}, '${esc(w.email)}')">&times;</button></td>
   </tr>`).join('');
 }
