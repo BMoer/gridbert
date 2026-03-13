@@ -12,7 +12,7 @@ from typing import Any
 
 import anthropic
 
-from gridbert.llm.types import LLMContentBlock, LLMResponse, LLMTextBlock, LLMToolUseBlock
+from gridbert.llm.types import LLMContentBlock, LLMResponse, LLMTextBlock, LLMToolUseBlock, LLMUsage
 
 log = logging.getLogger(__name__)
 
@@ -52,7 +52,11 @@ class ClaudeProvider:
                 ))
 
         stop = "end_turn" if response.stop_reason == "end_turn" else "tool_use"
-        return LLMResponse(content=tuple(blocks), stop_reason=stop)
+        usage = LLMUsage(
+            input_tokens=getattr(response.usage, "input_tokens", 0),
+            output_tokens=getattr(response.usage, "output_tokens", 0),
+        )
+        return LLMResponse(content=tuple(blocks), stop_reason=stop, usage=usage)
 
     def _chat_with_retry(
         self,

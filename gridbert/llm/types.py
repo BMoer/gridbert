@@ -29,6 +29,14 @@ LLMContentBlock = LLMTextBlock | LLMToolUseBlock
 
 
 @dataclass(frozen=True)
+class LLMUsage:
+    """Token usage from a single LLM call."""
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+
+
+@dataclass(frozen=True)
 class LLMResponse:
     """Normalized LLM response — provider-agnostic.
 
@@ -37,6 +45,7 @@ class LLMResponse:
 
     content: tuple[LLMContentBlock, ...] = field(default_factory=tuple)
     stop_reason: str = "end_turn"
+    usage: LLMUsage = field(default_factory=LLMUsage)
 
     @property
     def text_parts(self) -> list[str]:

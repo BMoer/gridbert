@@ -211,6 +211,33 @@ def chat(
         except Exception:
             log.exception("Fehler beim Speichern der Assistant-Antwort")
 
+        # Usage tracking
+        try:
+            if agent.total_input_tokens or agent.total_output_tokens:
+                from gridbert.storage.schema import api_usage
+                cost = _calculate_cost(
+                    provider_name, model,
+                    agent.total_input_tokens, agent.total_output_tokens,
+                )
+                conn.execute(api_usage.insert().values(
+                    user_id=user_id,
+                    conversation_id=conversation_id,
+                    provider=provider_name,
+                    model=model,
+                    input_tokens=agent.total_input_tokens,
+                    output_tokens=agent.total_output_tokens,
+                    cost_usd=cost,
+                    server_key=1 if using_server_key else 0,
+                ))
+                conn.commit()
+                log.info(
+                    "Usage: %s/%s in=%d out=%d cost=$%.4f",
+                    provider_name, model,
+                    agent.total_input_tokens, agent.total_output_tokens, cost,
+                )
+        except Exception:
+            log.exception("Fehler beim Speichern der Usage-Daten")
+
         # Finale SSE mit Conversation-ID
         done_data = json.dumps({
             "type": "done",
@@ -289,6 +316,32 @@ def list_user_memory(
 ) -> list[dict[str, Any]]:
     """Alle gespeicherten Fakten eines Users laden."""
     return get_user_memories(conn, user_id)
+
+
+# Cost per million tokens (USD) — input / output
+_COST_TABLE: dict[str, tuple[float, float]] = {
+    # Claude
+    "claude-haiku-4-5-20251001": (1.0, 5.0),
+    "claude-sonnet-4-6": (3.0, 15.0),
+    "claude-opus-4-6": (15.0, 75.0),
+    # OpenAI
+    "gpt-4o": (2.5, 10.0),
+    "gpt-4o-mini": (0.15, 0.6),
+}
+# Fallback costs per provider
+_COST_FALLBACK: dict[str, tuple[float, float]] = {
+    "claude": (1.0, 5.0),  # assume Haiku
+    "openai": (2.5, 10.0),  # assume GPT-4o
+}
+
+
+def _calculate_cost(
+    provider: str, model: str, input_tokens: int, output_tokens: int,
+) -> float:
+    """Calculate USD cost from token counts."""
+    costs = _COST_TABLE.get(model) or _COST_FALLBACK.get(provider, (1.0, 5.0))
+    input_cost, output_cost = costs
+    return (input_tokens * input_cost + output_tokens * output_cost) / 1_000_000
 
 
 def _history_to_messages(history: list[dict]) -> list[dict[str, Any]]:

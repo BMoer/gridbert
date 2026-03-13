@@ -41,6 +41,9 @@ class GridbertAgent:
         self._tools = tool_registry
         self._user_memory = user_memory or []
         self._user_files = user_files or []
+        # Usage tracking — populated after run()
+        self.total_input_tokens: int = 0
+        self.total_output_tokens: int = 0
 
     def _build_system_prompt(self) -> str:
         """System-Prompt mit User-Memory-Kontext aufbauen."""
@@ -109,6 +112,8 @@ class GridbertAgent:
         system_prompt = self._build_system_prompt()
         tool_definitions = self._tools.definitions()
         final_text = ""
+        total_input_tokens = 0
+        total_output_tokens = 0
 
         for turn in range(max_turns):
             log.info("Agent Turn %d/%d", turn + 1, max_turns)
@@ -127,6 +132,10 @@ class GridbertAgent:
                 tools=tool_definitions,
                 max_tokens=CLAUDE_MAX_TOKENS,
             )
+
+            # Accumulate token usage
+            total_input_tokens += response.usage.input_tokens
+            total_output_tokens += response.usage.output_tokens
 
             # Response-Content verarbeiten
             text_parts: list[str] = []
@@ -153,6 +162,9 @@ class GridbertAgent:
                 # Vorschläge aus dem Text extrahieren
                 suggestions = _SUGGESTION_RE.findall(raw_text)
                 final_text = _SUGGESTION_RE.sub("", raw_text).rstrip("\n ")
+
+                self.total_input_tokens = total_input_tokens
+                self.total_output_tokens = total_output_tokens
 
                 if on_event:
                     done_data: dict[str, Any] = {"final_text": final_text}
@@ -212,6 +224,8 @@ class GridbertAgent:
             messages.extend(self._llm.build_tool_results_message(tool_results))
 
         # Max turns erreicht
+        self.total_input_tokens = total_input_tokens
+        self.total_output_tokens = total_output_tokens
         final_text = "Ich hab zu viele Schritte gebraucht. Hier ist was ich bisher habe."
         log.warning("Agent hat max_turns (%d) erreicht", max_turns)
         if on_event:

@@ -55,3 +55,9 @@ CHAT_RATE_LIMIT: int = int(os.getenv("CHAT_RATE_LIMIT", "10"))  # per user per m
 REGISTRATION_ALLOWLIST: list[str] = [
     e.strip().lower() for e in os.getenv("REGISTRATION_ALLOWLIST", "").split(",") if e.strip()
 ]
+
+# --- Admin ----------------------------------------------------------------
+ADMIN_EMAILS: list[str] = [
+    e.strip().lower() for e in os.getenv("ADMIN_EMAILS", "").split(",") if e.strip()
+]
+ADMIN_TOKEN: str = os.getenv("ADMIN_TOKEN", "")

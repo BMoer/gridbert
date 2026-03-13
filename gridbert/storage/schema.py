@@ -35,6 +35,8 @@ users = Table(
     Column("llm_api_key_enc", Text, default=""),  # Fernet-encrypted API key
     Column("llm_model", String, default=""),  # e.g. "claude-haiku-4-5-20251001", "gpt-4o"
     Column("nudged_at", DateTime, nullable=True),  # when feedback nudge was sent
+    Column("is_admin", Integer, default=0),  # 1 = admin user
+    Column("admin_last_login_at", DateTime, nullable=True),  # last admin dashboard login
     Column("created_at", DateTime, server_default=func.now()),
 )
 
@@ -125,6 +127,23 @@ waitlist = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("email", String, unique=True, nullable=False),
     Column("name", String, default=""),
+    Column("created_at", DateTime, server_default=func.now()),
+)
+
+# --- API Usage Tracking -------------------------------------------------------
+
+api_usage = Table(
+    "api_usage",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", Integer, ForeignKey("users.id"), nullable=False),
+    Column("conversation_id", Integer, ForeignKey("conversations.id")),
+    Column("provider", String, nullable=False),  # "claude" | "openai"
+    Column("model", String, nullable=False),
+    Column("input_tokens", Integer, default=0),
+    Column("output_tokens", Integer, default=0),
+    Column("cost_usd", Float, default=0.0),  # calculated cost
+    Column("server_key", Integer, default=0),  # 1 = server key (we pay), 0 = user's own key
     Column("created_at", DateTime, server_default=func.now()),
 )
 

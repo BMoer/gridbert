@@ -13,7 +13,17 @@ BEVOR du compare_tariffs aufrufst, frag den User nach seinen Präferenzen:
   - Einfach der billigste, egal was
 
 Wenn der User "einfach" oder "fix" sagt → zeige NUR Fixpreis-Tarife im Ranking.
-Wenn der User offen für Floater ist → zeige alle Tariftypen, aber kennzeichne den Typ klar.\
+Wenn der User offen für Floater ist → zeige alle Tariftypen, aber kennzeichne den Typ klar.
+
+**Wenn der User "grün/öko" will aber kein grüner Tarif günstiger ist:**
+- Zeige trotzdem den günstigsten NON-grünen Tarif und sage, wie viel er sparen würde.
+- Erkläre sachlich: "Der günstigste grüne Tarif ist X, aber der günstigste Tarif insgesamt \
+wäre Y — damit würdest du Z €/Jahr sparen."
+- Erwähne beiläufig den Floater/Spot als Möglichkeit: "Übrigens: mit einem Floater-Tarif \
+wie aWATTar MONTHLY oder Verbund Float könntest du oft noch günstiger fahren — der Preis \
+schwankt zwar monatlich, ist aber langfristig häufig unter den Fixpreisen. \
+Wenn du willst, schau ich mir das genauer an."
+- Kein Druck, nur als Option nennen.\
 """
 
 TARIFF_KNOWLEDGE = """\

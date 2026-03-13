@@ -28,6 +28,8 @@ WIDGET_INSTRUCTIONS = """\
 ## Dashboard — Ergebnisse visualisieren (PFLICHT)
 NACH JEDER Analyse MUSST du add_dashboard_widget aufrufen, um die Ergebnisse im Dashboard \
 darzustellen. Das ist PFLICHT — der User sieht die Ergebnisse visuell im Dashboard.
+AUCH wenn die Ersparnis gering ist oder es keine günstigeren Tarife gibt: \
+IMMER das Widget erstellen, damit der User das Ergebnis im Dashboard sehen kann.
 
 ### Nach parse_invoice → widget_type="invoice_summary"
 Verwende EXAKT diese Feldnamen im config-Objekt (Werte als REINE ZAHLEN ohne Einheiten):

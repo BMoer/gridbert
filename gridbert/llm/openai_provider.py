@@ -11,7 +11,7 @@ import logging
 import time
 from typing import Any
 
-from gridbert.llm.types import LLMContentBlock, LLMResponse, LLMTextBlock, LLMToolUseBlock
+from gridbert.llm.types import LLMContentBlock, LLMResponse, LLMTextBlock, LLMToolUseBlock, LLMUsage
 
 log = logging.getLogger(__name__)
 
@@ -82,7 +82,11 @@ class OpenAIProvider:
                 ))
 
         stop = "tool_use" if choice.finish_reason == "tool_calls" else "end_turn"
-        return LLMResponse(content=tuple(blocks), stop_reason=stop)
+        usage = LLMUsage(
+            input_tokens=getattr(response.usage, "prompt_tokens", 0) if response.usage else 0,
+            output_tokens=getattr(response.usage, "completion_tokens", 0) if response.usage else 0,
+        )
+        return LLMResponse(content=tuple(blocks), stop_reason=stop, usage=usage)
 
     def _completions_with_retry(self, **kwargs: Any) -> Any:
         """Call OpenAI API with exponential backoff on 429 rate limit errors."""

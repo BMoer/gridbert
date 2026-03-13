@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gridbert Admin</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='1' y='1' width='30' height='30' rx='6' fill='%23E8E0D4'/%3E%3Ccircle cx='9' cy='13' r='5.5' stroke='%232C2C2C' stroke-width='1.5' fill='none'/%3E%3Ccircle cx='23' cy='13' r='5.5' stroke='%232C2C2C' stroke-width='1.5' fill='none'/%3E%3Cline x1='14.5' y1='11.5' x2='17.5' y2='11.5' stroke='%232C2C2C' stroke-width='1.2' stroke-linecap='round'/%3E%3Ccircle cx='9' cy='13' r='2' fill='%232C2C2C'/%3E%3Ccircle cx='23' cy='13' r='2' fill='%232C2C2C'/%3E%3Ccircle cx='9.7' cy='12.2' r='0.6' fill='%23F5F1EB'/%3E%3Ccircle cx='23.7' cy='12.2' r='0.6' fill='%23F5F1EB'/%3E%3Cpath d='M12,20 Q16,23.5 20,20' stroke='%232C2C2C' stroke-width='1.2' fill='none' stroke-linecap='round'/%3E%3Cpath d='M12,24 L15,26 L12,28 Z' fill='%23C4654A' stroke='%232C2C2C' stroke-width='0.6' stroke-linejoin='round'/%3E%3Cpath d='M20,24 L17,26 L20,28 Z' fill='%23C4654A' stroke='%232C2C2C' stroke-width='0.6' stroke-linejoin='round'/%3E%3Ccircle cx='16' cy='26' r='1' fill='%232C2C2C'/%3E%3Ccircle cx='26' cy='6' r='5' fill='%23C4654A'/%3E%3Cpath d='M26,2.5 L27.2,5 L30,5.3 L28,7.2 L28.5,10 L26,8.7 L23.5,10 L24,7.2 L22,5.3 L24.8,5 Z' fill='%23FAF8F4'/%3E%3C/svg%3E" />
 <style>
   :root {
     --bone: #f5f0e8; --ink: #2c2c2c; --terracotta: #c4633f;
@@ -18,60 +19,154 @@
   h1 { font-family: 'Fraunces', serif; font-size: 1.8rem; margin-bottom: 4px; }
   h2 { font-family: 'Fraunces', serif; font-size: 1.2rem; margin: 24px 0 12px; color: var(--terracotta); }
   .subtitle { color: var(--warm-grau); font-size: 0.9rem; margin-bottom: 20px; }
-  .kpi-row { display: flex; gap: 16px; margin-bottom: 24px; }
-  .kpi {
-    background: var(--kreide); border-radius: 10px; padding: 16px 24px;
-    flex: 1; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+
+  /* --- Login Screen --- */
+  #login-screen {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 80vh;
   }
-  .kpi-value { font-family: 'JetBrains Mono', monospace; font-size: 2rem; font-weight: 600; color: var(--terracotta); }
-  .kpi-label { font-size: 0.85rem; color: var(--warm-grau); margin-top: 4px; }
-  table { width: 100%; border-collapse: collapse; background: var(--kreide); border-radius: 10px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
-  th { background: var(--ink); color: var(--kreide); text-align: left; padding: 10px 14px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; }
-  td { padding: 10px 14px; border-bottom: 1px solid var(--bone); font-size: 0.9rem; }
+  .login-card {
+    background: var(--kreide); border-radius: 12px; padding: 40px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08); max-width: 380px; width: 100%;
+  }
+  .login-card h1 { text-align: center; margin-bottom: 8px; }
+  .login-card .subtitle { text-align: center; margin-bottom: 24px; }
+  .login-card input {
+    width: 100%; padding: 12px; border: 1px solid var(--warm-grau); border-radius: 8px;
+    font-family: inherit; font-size: 1rem; margin-bottom: 12px; background: var(--bone);
+  }
+  .login-card input:focus { outline: 2px solid var(--terracotta); border-color: transparent; }
+  .login-card button {
+    width: 100%; padding: 12px; background: var(--terracotta); color: white;
+    border: none; border-radius: 8px; font-family: inherit; font-size: 1rem;
+    font-weight: 600; cursor: pointer; min-height: 44px;
+  }
+  .login-card button:hover { opacity: 0.9; }
+  .login-error { color: var(--red); font-size: 0.85rem; margin-bottom: 12px; display: none; }
+
+  /* --- Dashboard (hidden until login) --- */
+  #dashboard { display: none; }
+
+  /* --- KPIs --- */
+  .kpi-row { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+  .kpi {
+    background: var(--kreide); border-radius: 10px; padding: 14px 18px;
+    flex: 1; min-width: 120px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .kpi-value { font-family: 'JetBrains Mono', monospace; font-size: 1.8rem; font-weight: 600; color: var(--terracotta); }
+  .kpi-label { font-size: 0.8rem; color: var(--warm-grau); margin-top: 4px; }
+
+  /* --- AI Summary Card --- */
+  .summary-card {
+    background: var(--kreide); border-radius: 10px; padding: 20px; margin-bottom: 20px;
+    border-left: 4px solid var(--terracotta); box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .summary-card h3 { font-family: 'Fraunces', serif; font-size: 1rem; color: var(--terracotta); margin-bottom: 8px; }
+  .summary-text { font-size: 0.95rem; line-height: 1.6; }
+  .summary-loading { color: var(--warm-grau); font-style: italic; }
+  .summary-meta { font-size: 0.75rem; color: var(--warm-grau); margin-top: 8px; }
+
+  /* --- Tables --- */
+  .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 10px; margin-bottom: 8px; }
+  table { width: 100%; border-collapse: collapse; background: var(--kreide); overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  th { background: var(--ink); color: var(--kreide); text-align: left; padding: 10px 12px; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--bone); font-size: 0.85rem; }
   tr:last-child td { border-bottom: none; }
   .role-user { color: var(--terracotta); font-weight: 600; }
   .role-assistant { color: var(--green); font-weight: 600; }
-  .content-cell { max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+  .content-cell { max-width: 350px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
   .content-cell.expanded { white-space: normal; word-break: break-word; }
   .mono { font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; }
-  /* Allowlist */
-  .allowlist-panel { background: var(--kreide); border-radius: 10px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
-  .add-form { display: flex; gap: 8px; margin-bottom: 16px; }
+
+  /* --- Panels & Forms --- */
+  .allowlist-panel { background: var(--kreide); border-radius: 10px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .add-form { display: flex; gap: 8px; margin-bottom: 12px; }
   .add-form input {
-    flex: 1; padding: 8px 12px; border: 1px solid var(--warm-grau); border-radius: 6px;
-    font-family: inherit; font-size: 0.9rem;
+    flex: 1; padding: 10px 12px; border: 1px solid var(--warm-grau); border-radius: 6px;
+    font-family: inherit; font-size: 0.9rem; min-height: 44px;
   }
   .btn {
     padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer;
-    font-family: inherit; font-size: 0.85rem; font-weight: 600;
+    font-family: inherit; font-size: 0.85rem; font-weight: 600; min-height: 44px;
+    white-space: nowrap;
   }
   .btn-add { background: var(--terracotta); color: white; }
   .btn-add:hover { opacity: 0.9; }
-  .btn-remove { background: none; color: var(--red); border: 1px solid var(--red); padding: 4px 10px; font-size: 0.8rem; }
+  .btn-remove { background: none; color: var(--red); border: 1px solid var(--red); padding: 4px 10px; font-size: 0.8rem; min-height: 36px; }
   .btn-remove:hover { background: var(--red); color: white; }
   .btn-refresh { background: var(--ink); color: var(--kreide); }
-  .header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+  .header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; gap: 12px; }
   .status-msg { padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; font-size: 0.85rem; display: none; }
   .status-ok { background: #e8f5e9; color: var(--green); display: block; }
   .status-err { background: #fde8e8; color: var(--red); display: block; }
-  @media (max-width: 600px) { .kpi-row { flex-direction: column; } }
+
+  /* --- Mobile Responsive --- */
+  @media (max-width: 768px) {
+    body { padding: 16px; }
+    h1 { font-size: 1.4rem; }
+    h2 { font-size: 1.1rem; margin: 20px 0 10px; }
+    .header-row { flex-direction: column; align-items: flex-start; }
+    .kpi-row { gap: 8px; }
+    .kpi { min-width: calc(50% - 8px); padding: 12px; }
+    .kpi-value { font-size: 1.4rem; }
+    .kpi-label { font-size: 0.75rem; }
+    .add-form { flex-direction: column; }
+    .add-form input, .add-form .btn { width: 100%; }
+    td, th { padding: 8px 10px; font-size: 0.8rem; }
+    .content-cell { max-width: 200px; }
+    .login-card { padding: 24px 20px; }
+    .hide-mobile { display: none; }
+  }
+  @media (max-width: 480px) {
+    .kpi { min-width: 100%; }
+    .kpi-value { font-size: 1.2rem; }
+  }
+  @media (pointer: coarse) {
+    #paste-zone { font-size: 0.9rem; padding: 20px; }
+  }
 </style>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;700&family=Source+Serif+4:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 </head>
 <body>
+
+<!-- Login Screen -->
+<div id="login-screen">
+  <div class="login-card">
+    <h1>Gridbert Admin</h1>
+    <div class="subtitle">Bitte anmelden</div>
+    <div id="login-error" class="login-error"></div>
+    <input type="email" id="login-email" placeholder="E-Mail" autocomplete="email" />
+    <input type="password" id="login-password" placeholder="Passwort" autocomplete="current-password" />
+    <button onclick="doLogin()">Anmelden</button>
+  </div>
+</div>
+
+<!-- Dashboard (shown after login) -->
+<div id="dashboard">
 
 <div class="header-row">
   <div>
     <h1>Gridbert Admin</h1>
     <div class="subtitle">Usage Analytics & Allowlist Management</div>
   </div>
-  <button class="btn btn-refresh" onclick="loadAll()">Aktualisieren</button>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <button class="btn btn-refresh" onclick="loadAll()">Aktualisieren</button>
+    <button class="btn" style="background:none;color:var(--warm-grau);border:1px solid var(--warm-grau);" onclick="doLogout()">Logout</button>
+  </div>
+</div>
+
+<!-- AI Summary -->
+<div id="ai-summary" class="summary-card" style="display:none;">
+  <h3>Zusammenfassung</h3>
+  <div id="summary-content" class="summary-text summary-loading">Zusammenfassung wird erstellt...</div>
+  <div id="summary-meta" class="summary-meta"></div>
 </div>
 
 <!-- KPIs -->
 <div class="kpi-row">
-  <div class="kpi"><div class="kpi-value" id="kpi-users">-</div><div class="kpi-label">Users</div></div>
   <div class="kpi"><div class="kpi-value" id="kpi-waitlist">-</div><div class="kpi-label">Waitlist</div></div>
+  <div class="kpi"><div class="kpi-value" id="kpi-allowed">-</div><div class="kpi-label">Freigeschaltet</div></div>
+  <div class="kpi"><div class="kpi-value" id="kpi-users">-</div><div class="kpi-label">Users</div></div>
   <div class="kpi"><div class="kpi-value" id="kpi-messages">-</div><div class="kpi-label">Messages</div></div>
   <div class="kpi"><div class="kpi-value" id="kpi-conversations">-</div><div class="kpi-label">Conversations</div></div>
 </div>
@@ -79,12 +174,15 @@
   <div class="kpi"><div class="kpi-value" id="kpi-invoices" style="color:var(--green)">-</div><div class="kpi-label">Rechnung hochgeladen</div></div>
   <div class="kpi"><div class="kpi-value" id="kpi-comparisons" style="color:var(--green)">-</div><div class="kpi-label">Tarife verglichen</div></div>
   <div class="kpi"><div class="kpi-value" id="kpi-savings" style="color:var(--green)">-</div><div class="kpi-label">Ersparnis gefunden (total)</div></div>
+  <div class="kpi"><div class="kpi-value" id="kpi-llm-cost" style="color:var(--terracotta)">-</div><div class="kpi-label">LLM Kosten (USD)</div></div>
 </div>
 
 <!-- Users -->
 <h2>Users</h2>
 <div id="nudge-status" class="status-msg"></div>
-<table><thead><tr><th>Email</th><th>Name</th><th>Msgs</th><th>Rechnung</th><th>Vergleich</th><th>Seit</th><th>Nudge</th><th></th></tr></thead><tbody id="users-body"></tbody></table>
+<div class="table-scroll">
+<table><thead><tr><th>Email</th><th class="hide-mobile">Name</th><th>Msgs</th><th>Rechnung</th><th>Vergleich</th><th>API Key</th><th class="hide-mobile">Seit</th><th>Nudge</th><th></th></tr></thead><tbody id="users-body"></tbody></table>
+</div>
 
 <!-- Allowlist -->
 <h2>Registration Allowlist</h2>
@@ -99,7 +197,9 @@
     <input type="email" id="new-email" placeholder="email@example.com" onkeydown="if(event.key==='Enter')addEmail()" />
     <button class="btn btn-add" onclick="addEmail()">Freigeben</button>
   </div>
-  <table><thead><tr><th>Email</th><th>Hinzugefuegt von</th><th>Datum</th><th></th></tr></thead><tbody id="allowlist-body"></tbody></table>
+  <div class="table-scroll">
+  <table><thead><tr><th>Email</th><th class="hide-mobile">Hinzugefuegt von</th><th>Datum</th><th></th></tr></thead><tbody id="allowlist-body"></tbody></table>
+  </div>
 </div>
 
 <!-- Waitlist -->
@@ -111,30 +211,119 @@
     Formspree-Screenshot hier einfuegen (Ctrl+V) oder klicken zum Hochladen
     <input type="file" id="waitlist-file" accept="image/*" style="display:none" />
   </div>
-  <table><thead><tr><th>Email</th><th>Name</th><th>Datum</th><th></th></tr></thead><tbody id="waitlist-body"></tbody></table>
+  <div class="table-scroll">
+  <table><thead><tr><th>Email</th><th>Status</th><th>Datum</th><th></th></tr></thead><tbody id="waitlist-body"></tbody></table>
+  </div>
+  <div style="margin-top:12px;text-align:right;">
+    <button class="btn btn-remove" onclick="clearWaitlist()">Alle entfernen</button>
+  </div>
 </div>
 
 <!-- Activity -->
 <h2>Letzte Aktivitaet</h2>
-<table><thead><tr><th>Zeit</th><th>User</th><th>Rolle</th><th>Inhalt</th><th>Tool</th></tr></thead><tbody id="activity-body"></tbody></table>
+<div class="table-scroll">
+<table><thead><tr><th>Zeit</th><th>User</th><th>Rolle</th><th>Inhalt</th><th class="hide-mobile">Tool</th></tr></thead><tbody id="activity-body"></tbody></table>
+</div>
+
+</div><!-- /dashboard -->
 
 <script>
 const params = new URLSearchParams(window.location.search);
-const TOKEN = params.get('token') || '';
+const LEGACY_TOKEN = params.get('token') || '';
 const BASE = window.location.pathname.replace('/dashboard', '');
+let JWT_TOKEN = sessionStorage.getItem('gridbert_admin_jwt') || '';
+
+// --- Auth ---
+function getAuthHeaders() {
+  if (JWT_TOKEN) return { 'Authorization': 'Bearer ' + JWT_TOKEN };
+  return {};
+}
 
 async function api(path, opts = {}) {
-  const sep = path.includes('?') ? '&' : '?';
-  const res = await fetch(`${BASE}${path}${sep}token=${TOKEN}`, opts);
+  const headers = { ...getAuthHeaders(), ...(opts.headers || {}) };
+  let url = `${BASE}${path}`;
+  if (LEGACY_TOKEN && !JWT_TOKEN) {
+    const sep = url.includes('?') ? '&' : '?';
+    url += `${sep}token=${LEGACY_TOKEN}`;
+  }
+  const res = await fetch(url, { ...opts, headers });
+  if (res.status === 401 || res.status === 403) {
+    doLogout();
+    throw new Error('Session abgelaufen');
+  }
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
 
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-error');
+  errEl.style.display = 'none';
+
+  if (!email || !password) {
+    errEl.textContent = 'Bitte E-Mail und Passwort eingeben';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  try {
+    const res = await fetch(`${BASE}/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({ detail: 'Login fehlgeschlagen' }));
+      errEl.textContent = data.detail || 'Login fehlgeschlagen';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    const data = await res.json();
+    JWT_TOKEN = data.access_token;
+    sessionStorage.setItem('gridbert_admin_jwt', JWT_TOKEN);
+    showDashboard();
+  } catch (e) {
+    errEl.textContent = 'Verbindungsfehler';
+    errEl.style.display = 'block';
+  }
+}
+
+function doLogout() {
+  JWT_TOKEN = '';
+  sessionStorage.removeItem('gridbert_admin_jwt');
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('dashboard').style.display = 'none';
+}
+
+function showDashboard() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+  loadAll();
+  loadSummary();
+}
+
+// Enter key on password field
+document.getElementById('login-password').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') doLogin();
+});
+document.getElementById('login-email').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('login-password').focus();
+});
+
+// --- Auto-login check ---
+if (JWT_TOKEN || LEGACY_TOKEN) {
+  showDashboard();
+}
+
+// --- Helpers ---
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
 function fmtDate(s) {
   if (!s) return '-';
-  const d = new Date(s + 'Z');
+  const d = new Date(s.includes('T') || s.includes('Z') ? s : s + 'Z');
   return d.toLocaleDateString('de-AT') + ' ' + d.toLocaleTimeString('de-AT', {hour:'2-digit',minute:'2-digit'});
 }
 
@@ -149,7 +338,7 @@ function nudgeBtn(u) {
     return `<button class="btn" style="font-size:0.75rem;padding:4px 10px;background:none;color:var(--green);border:1px solid var(--green);cursor:default;" disabled title="Gesendet ${fmtDate(u.nudged_at)}">Gesendet</button>`;
   }
   if (!isOldEnough) {
-    return `<button class="btn" style="font-size:0.75rem;padding:4px 10px;background:none;color:var(--warm-grau);border:1px solid var(--warm-grau);cursor:default;" disabled title="Erst ${Math.ceil(ageDays)} Tag(e) — noch nicht 3 Tage">Zu frueh</button>`;
+    return `<button class="btn" style="font-size:0.75rem;padding:4px 10px;background:none;color:var(--warm-grau);border:1px solid var(--warm-grau);cursor:default;" disabled title="Erst ${Math.ceil(ageDays)} Tag(e)">Zu frueh</button>`;
   }
   return `<button class="btn btn-add" style="font-size:0.75rem;padding:4px 10px;" onclick="sendNudge(${u.id}, '${esc(u.email)}')">Nudge</button>`;
 }
@@ -157,26 +346,67 @@ function nudgeBtn(u) {
 function statusDot(ok) {
   return ok
     ? '<span style="color:var(--green);font-weight:600;" title="Ja">&#10003;</span>'
-    : '<span style="color:var(--warm-grau);" title="Nein">—</span>';
+    : '<span style="color:var(--warm-grau);" title="Nein">&mdash;</span>';
 }
 
+// --- AI Summary ---
+let summaryLoaded = false;
+async function loadSummary() {
+  if (summaryLoaded) return;
+  const card = document.getElementById('ai-summary');
+  const content = document.getElementById('summary-content');
+  const meta = document.getElementById('summary-meta');
+  card.style.display = 'block';
+  content.className = 'summary-text summary-loading';
+  content.textContent = 'Zusammenfassung wird erstellt...';
+
+  try {
+    const data = await api('/summary');
+    summaryLoaded = true;
+    if (data.summary) {
+      content.className = 'summary-text';
+      content.innerHTML = esc(data.summary).replace(/\n/g, '<br>');
+      if (data.raw && data.raw.since) {
+        meta.textContent = `Zeitraum: seit ${fmtDate(data.raw.since)}`;
+      }
+    } else if (data.raw) {
+      content.className = 'summary-text';
+      const r = data.raw;
+      content.innerHTML = `Seit ${fmtDate(r.since)}: <strong>${r.new_users}</strong> neue User, <strong>${r.new_messages}</strong> Nachrichten, <strong>${r.new_conversations}</strong> Conversations, <strong>${r.new_waitlist}</strong> Waitlist. Kosten: $${r.cost_usd.toFixed(2)}`;
+    } else {
+      card.style.display = 'none';
+    }
+  } catch (e) {
+    card.style.display = 'none';
+  }
+}
+
+// --- Data Loading ---
 async function loadOverview() {
   const d = await api('/overview');
-  document.getElementById('kpi-users').textContent = d.total_users;
   document.getElementById('kpi-waitlist').textContent = d.total_waitlist;
+  document.getElementById('kpi-allowed').textContent = d.total_allowed;
+  document.getElementById('kpi-users').textContent = d.total_users;
   document.getElementById('kpi-messages').textContent = d.total_messages;
   document.getElementById('kpi-conversations').textContent = d.total_conversations;
   document.getElementById('kpi-invoices').textContent = d.users_with_invoice;
   document.getElementById('kpi-comparisons').textContent = d.users_with_comparison;
-  document.getElementById('kpi-savings').textContent = d.total_savings_eur > 0 ? `${Math.round(d.total_savings_eur)} €` : '-';
+  document.getElementById('kpi-savings').textContent = d.total_savings_eur > 0 ? `${Math.round(d.total_savings_eur)} \u20AC` : '-';
+  const costStr = d.llm_cost_usd > 0 ? `$${d.llm_cost_usd.toFixed(2)}` : '-';
+  const tokenK = Math.round((d.llm_input_tokens + d.llm_output_tokens) / 1000);
+  document.getElementById('kpi-llm-cost').textContent = costStr;
+  document.getElementById('kpi-llm-cost').title = `Wir zahlen: $${d.llm_server_cost_usd.toFixed(2)} \u2014 User zahlen: $${d.llm_user_cost_usd.toFixed(2)}\n${tokenK}k Tokens (${Math.round(d.llm_input_tokens/1000)}k in + ${Math.round(d.llm_output_tokens/1000)}k out)`;
   const tbody = document.getElementById('users-body');
   tbody.innerHTML = d.users.map(u => `<tr>
     <td class="mono">${esc(u.email)}</td>
-    <td>${esc(u.name || '-')}</td>
+    <td class="hide-mobile">${esc(u.name || '-')}</td>
     <td class="mono">${u.message_count}</td>
     <td style="text-align:center">${statusDot(u.has_invoice)}</td>
     <td style="text-align:center">${statusDot(u.has_comparison)}</td>
-    <td>${fmtDate(u.created_at)}</td>
+    <td style="text-align:center">${u.uses_own_key
+      ? '<span style="color:var(--green);font-weight:600;" title="Eigener Key">&#128273;</span>'
+      : '<span style="color:var(--warm-grau);" title="Server Key">Server</span>'}</td>
+    <td class="hide-mobile">${fmtDate(u.created_at)}</td>
     <td>${nudgeBtn(u)}</td>
     <td><button class="btn btn-remove" onclick="deleteUser(${u.id}, '${esc(u.email)}')">Loeschen</button></td>
   </tr>`).join('');
@@ -190,7 +420,7 @@ async function loadActivity() {
     <td class="mono">${esc(r.user_email)}</td>
     <td class="${r.role === 'user' ? 'role-user' : 'role-assistant'}">${r.role}</td>
     <td class="content-cell" onclick="this.classList.toggle('expanded')">${esc(r.content)}</td>
-    <td class="mono">${esc(r.tool_name || '')}</td>
+    <td class="mono hide-mobile">${esc(r.tool_name || '')}</td>
   </tr>`).join('');
 }
 
@@ -199,7 +429,7 @@ async function loadAllowlist() {
   const tbody = document.getElementById('allowlist-body');
   tbody.innerHTML = entries.map(e => `<tr>
     <td class="mono">${esc(e.email)}</td>
-    <td>${esc(e.added_by || '-')}</td>
+    <td class="hide-mobile">${esc(e.added_by || '-')}</td>
     <td>${fmtDate(e.created_at)}</td>
     <td><button class="btn btn-remove" onclick="removeEmail('${esc(e.email)}')">Entfernen</button></td>
   </tr>`).join('');
@@ -239,7 +469,7 @@ async function removeEmail(email) {
 }
 
 async function deleteUser(userId, email) {
-  if (!confirm(`${email} und alle Daten wirklich loeschen? Das kann nicht rueckgaengig gemacht werden!`)) return;
+  if (!confirm(`${email} und alle Daten wirklich loeschen?`)) return;
   const st = document.getElementById('allowlist-status');
   try {
     await api(`/users/${userId}`, { method: 'DELETE' });
@@ -256,13 +486,22 @@ async function deleteUser(userId, email) {
 async function loadWaitlist() {
   const rows = await api('/waitlist');
   const tbody = document.getElementById('waitlist-body');
+  rows.sort((a, b) => {
+    if (a.is_allowed !== b.is_allowed) return a.is_allowed ? 1 : -1;
+    return (b.created_at || '').localeCompare(a.created_at || '');
+  });
   tbody.innerHTML = rows.length === 0
     ? '<tr><td colspan="4" style="text-align:center;color:var(--warm-grau)">Noch keine Eintraege</td></tr>'
     : rows.map(w => `<tr>
     <td class="mono">${esc(w.email)}</td>
-    <td>${esc(w.name || '-')}</td>
+    <td>${w.is_allowed
+      ? '<span style="color:var(--green);font-weight:600;">&#10003; Freigeschaltet</span>'
+      : '<span style="color:var(--warm-grau);">Wartet</span>'}</td>
     <td>${fmtDate(w.created_at)}</td>
-    <td><button class="btn btn-add" style="font-size:0.75rem;padding:4px 10px;" onclick="promoteToAllowlist('${esc(w.email)}')">Freigeben</button></td>
+    <td>${w.is_allowed
+      ? '<button class="btn" style="font-size:0.75rem;padding:4px 10px;background:none;color:var(--warm-grau);border:1px solid var(--warm-grau);cursor:default;" disabled>Bereits freigeschaltet</button>'
+      : \`<button class="btn btn-add" style="font-size:0.75rem;padding:4px 10px;" onclick="promoteToAllowlist('\${esc(w.email)}')">Freigeben</button>\`}
+      <button class="btn btn-remove" style="font-size:0.75rem;margin-left:4px;" onclick="deleteWaitlistEntry(${w.id}, '${esc(w.email)}')">&times;</button></td>
   </tr>`).join('');
 }
 
@@ -271,7 +510,7 @@ async function promoteToAllowlist(email) {
   try {
     const res = await api('/allowlist', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({email}) });
     st.className = 'status-msg status-ok';
-    st.textContent = `${email} freigeschaltet` + (res.email_sent ? ' — Einladungsmail gesendet!' : '');
+    st.textContent = `${email} freigeschaltet` + (res.email_sent ? ' \u2014 Einladungsmail gesendet!' : '');
     loadAllowlist();
     loadWaitlist();
   } catch (e) {
@@ -296,14 +535,48 @@ async function sendNudge(userId, email) {
   setTimeout(() => st.className = 'status-msg', 4000);
 }
 
+async function deleteWaitlistEntry(id, email) {
+  if (!confirm(`${email} von Waitlist entfernen?`)) return;
+  const st = document.getElementById('waitlist-import-status');
+  try {
+    await api(`/waitlist/${id}`, { method: 'DELETE' });
+    st.className = 'status-msg status-ok';
+    st.textContent = `${email} entfernt`;
+    loadWaitlist();
+    loadOverview();
+  } catch (e) {
+    st.className = 'status-msg status-err';
+    st.textContent = e.message;
+  }
+  setTimeout(() => st.className = 'status-msg', 3000);
+}
+
+async function clearWaitlist() {
+  if (!confirm('Gesamte Waitlist wirklich leeren?')) return;
+  const st = document.getElementById('waitlist-import-status');
+  try {
+    await api('/waitlist/clear', { method: 'DELETE' });
+    st.className = 'status-msg status-ok';
+    st.textContent = 'Waitlist geleert';
+    loadWaitlist();
+    loadOverview();
+  } catch (e) {
+    st.className = 'status-msg status-err';
+    st.textContent = e.message;
+  }
+  setTimeout(() => st.className = 'status-msg', 3000);
+}
+
 // --- Waitlist Screenshot Import ---
 const pasteZone = document.getElementById('paste-zone');
 const fileInput = document.getElementById('waitlist-file');
 
-pasteZone.addEventListener('click', () => fileInput.click());
-fileInput.addEventListener('change', (e) => {
-  if (e.target.files[0]) importImage(e.target.files[0]);
-});
+if (pasteZone && fileInput) {
+  pasteZone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', (e) => {
+    if (e.target.files[0]) importImage(e.target.files[0]);
+  });
+}
 
 document.addEventListener('paste', (e) => {
   const items = e.clipboardData?.items;
@@ -321,7 +594,7 @@ async function importImage(file) {
   const st = document.getElementById('waitlist-import-status');
   st.className = 'status-msg status-ok';
   st.textContent = 'Emails werden extrahiert...';
-  pasteZone.style.borderColor = 'var(--terracotta)';
+  if (pasteZone) pasteZone.style.borderColor = 'var(--terracotta)';
 
   try {
     const b64 = await new Promise((resolve) => {
@@ -340,7 +613,7 @@ async function importImage(file) {
     const parts = [];
     if (res.imported > 0) parts.push(`${res.imported} importiert (${res.imported_emails.join(', ')})`);
     if (res.skipped > 0) parts.push(`${res.skipped} bereits vorhanden`);
-    st.textContent = parts.length > 0 ? parts.join(' — ') : 'Keine Emails im Screenshot gefunden.';
+    st.textContent = parts.length > 0 ? parts.join(' \u2014 ') : 'Keine Emails im Screenshot gefunden.';
 
     loadWaitlist();
     loadOverview();
@@ -348,13 +621,11 @@ async function importImage(file) {
     st.className = 'status-msg status-err';
     st.textContent = e.message;
   }
-  pasteZone.style.borderColor = '';
+  if (pasteZone) pasteZone.style.borderColor = '';
   setTimeout(() => st.className = 'status-msg', 8000);
 }
 
 function loadAll() { loadOverview(); loadActivity(); loadAllowlist(); loadWaitlist(); }
-loadAll();
-setInterval(loadAll, 60000);
 </script>
 </body>
 </html>
