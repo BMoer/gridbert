@@ -6,6 +6,14 @@ interface Props {
   savingsWidget?: Widget;
 }
 
+/** Try multiple field names, return first truthy value. */
+function pick<T>(obj: Record<string, unknown>, ...keys: string[]): T | undefined {
+  for (const k of keys) {
+    if (obj[k] != null && obj[k] !== "") return obj[k] as T;
+  }
+  return undefined;
+}
+
 /** Dedicated dashboard for tariff comparison results. */
 export function TariffView({ tariffWidget, savingsWidget }: Props) {
   if (!tariffWidget && !savingsWidget) {
@@ -21,16 +29,14 @@ export function TariffView({ tariffWidget, savingsWidget }: Props) {
   }
 
   const config = tariffWidget?.config ?? {};
+  const sConfig = savingsWidget?.config ?? {};
 
-  // Accept both English and German field names
-  const currentCost = (config.current_cost_eur ?? config.aktuelle_kosten_eur) as number | undefined;
-  const bestCost = (config.best_cost_eur ?? config.beste_kosten_eur ?? config.bester_tarif_kosten_eur) as number | undefined;
-  const savingsEur = savingsWidget?.config?.savings_eur
-    ?? savingsWidget?.config?.max_ersparnis_eur
-    ?? config.savings_eur
-    ?? config.max_ersparnis_eur
-    ?? config.ersparnis_eur;
-  const tariffs = (config.tariffs ?? config.alternativen ?? config.tarife ?? []) as Record<string, unknown>[];
+  const currentCost = pick<number>(config, "current_cost_eur", "aktuelle_kosten_eur", "jahreskosten_aktuell");
+  const bestCost = pick<number>(config, "best_cost_eur", "beste_kosten_eur", "bester_tarif_kosten_eur", "jahreskosten_best");
+  const savingsEur = pick<number>(sConfig, "savings_eur", "max_ersparnis_eur", "ersparnis_eur")
+    ?? pick<number>(config, "savings_eur", "max_ersparnis_eur", "ersparnis_eur");
+  const netzkosten = pick<number>(config, "netzkosten_eur", "netzkosten");
+  const tariffs = (pick<Record<string, unknown>[]>(config, "tariffs", "alternativen", "tarife") ?? []);
 
   return (
     <div>
@@ -48,11 +54,16 @@ export function TariffView({ tariffWidget, savingsWidget }: Props) {
         {currentCost != null && (
           <div className="card" style={{ padding: "1rem" }}>
             <div style={{ fontFamily: "var(--font-body)", fontSize: "0.8rem", color: "var(--warm-grau)", marginBottom: "0.25rem" }}>
-              Aktuelle Kosten
+              Aktuelle Energiekosten
             </div>
             <div style={{ fontFamily: "var(--font-mono)", fontSize: "1.5rem", fontWeight: 600, color: "var(--ink)" }}>
               {Number(currentCost).toFixed(0)} <span style={{ fontSize: "0.85rem", fontWeight: 400, color: "var(--warm-grau)" }}>€/Jahr</span>
             </div>
+            {netzkosten != null && (
+              <div style={{ fontFamily: "var(--font-body)", fontSize: "0.75rem", color: "var(--warm-grau)", marginTop: "0.25rem" }}>
+                + {Number(netzkosten).toFixed(0)} € Netzkosten (fix)
+              </div>
+            )}
           </div>
         )}
         {bestCost != null && (
@@ -85,16 +96,26 @@ export function TariffView({ tariffWidget, savingsWidget }: Props) {
               <tr style={{ borderBottom: "1.5px solid var(--ink)" }}>
                 <th style={{ textAlign: "left", padding: "0.5rem", fontWeight: 600 }}>Lieferant</th>
                 <th style={{ textAlign: "left", padding: "0.5rem", fontWeight: 600 }}>Tarif</th>
-                <th style={{ textAlign: "right", padding: "0.5rem", fontWeight: 600 }}>Gesamtkosten</th>
+                <th style={{ textAlign: "left", padding: "0.5rem", fontWeight: 600 }}>Typ</th>
+                <th style={{ textAlign: "right", padding: "0.5rem", fontWeight: 600 }}>Jahreskosten</th>
                 <th style={{ textAlign: "right", padding: "0.5rem", fontWeight: 600 }}>Energiepreis</th>
+                <th style={{ textAlign: "right", padding: "0.5rem", fontWeight: 600 }}>Ersparnis</th>
               </tr>
             </thead>
             <tbody>
               {tariffs.map((t, i) => {
-                const name = (t.lieferant ?? t.anbieter ?? "—") as string;
-                const tarif = (t.tarif ?? t.tarif_name ?? "—") as string;
-                const cost = (t.preis_eur ?? t.jahreskosten_eur) as number | undefined;
-                const energy = (t.energiepreis_ct ?? t.energiepreis_ct_kwh) as number | undefined;
+                const name = pick<string>(t, "lieferant", "anbieter") ?? "—";
+                const tarif = pick<string>(t, "tarif", "tarif_name", "name") ?? "—";
+                const typ = pick<string>(t, "tariftyp", "typ", "type") ?? "";
+                const cost = pick<number>(t, "jahreskosten_eur", "preis_eur", "gesamtkosten_eur", "kosten_eur");
+                const energy = pick<number>(t, "energiepreis_ct", "energiepreis_ct_kwh", "ct_kwh");
+                const savings = pick<number>(t, "ersparnis_eur", "savings_eur");
+
+                // Color-code tariff type
+                const typColor = typ.toLowerCase().includes("fix") ? "var(--gruen)"
+                  : typ.toLowerCase().includes("spot") || typ.toLowerCase().includes("stunden") ? "var(--terracotta)"
+                  : typ.toLowerCase().includes("float") || typ.toLowerCase().includes("monat") ? "#c49a3f"
+                  : "var(--warm-grau)";
 
                 return (
                   <tr
@@ -106,11 +127,15 @@ export function TariffView({ tariffWidget, savingsWidget }: Props) {
                   >
                     <td style={{ padding: "0.5rem", fontWeight: i === 0 ? 600 : 400 }}>{name}</td>
                     <td style={{ padding: "0.5rem" }}>{tarif}</td>
+                    <td style={{ padding: "0.5rem", color: typColor, fontWeight: 600, fontSize: "0.8rem" }}>{typ || "—"}</td>
                     <td style={{ padding: "0.5rem", textAlign: "right", fontFamily: "var(--font-mono)" }}>
                       {cost != null ? `${Number(cost).toFixed(0)} €` : "—"}
                     </td>
                     <td style={{ padding: "0.5rem", textAlign: "right", fontFamily: "var(--font-mono)" }}>
                       {energy != null ? `${Number(energy).toFixed(2)} Ct` : "—"}
+                    </td>
+                    <td style={{ padding: "0.5rem", textAlign: "right", fontFamily: "var(--font-mono)", color: savings != null ? "var(--gruen)" : undefined }}>
+                      {savings != null ? `${Number(savings).toFixed(0)} €` : "—"}
                     </td>
                   </tr>
                 );

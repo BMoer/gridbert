@@ -71,20 +71,27 @@
 <!-- KPIs -->
 <div class="kpi-row">
   <div class="kpi"><div class="kpi-value" id="kpi-users">-</div><div class="kpi-label">Users</div></div>
+  <div class="kpi"><div class="kpi-value" id="kpi-waitlist">-</div><div class="kpi-label">Waitlist</div></div>
   <div class="kpi"><div class="kpi-value" id="kpi-messages">-</div><div class="kpi-label">Messages</div></div>
   <div class="kpi"><div class="kpi-value" id="kpi-conversations">-</div><div class="kpi-label">Conversations</div></div>
+</div>
+<div class="kpi-row">
+  <div class="kpi"><div class="kpi-value" id="kpi-invoices" style="color:var(--green)">-</div><div class="kpi-label">Rechnung hochgeladen</div></div>
+  <div class="kpi"><div class="kpi-value" id="kpi-comparisons" style="color:var(--green)">-</div><div class="kpi-label">Tarife verglichen</div></div>
+  <div class="kpi"><div class="kpi-value" id="kpi-savings" style="color:var(--green)">-</div><div class="kpi-label">Ersparnis gefunden (total)</div></div>
 </div>
 
 <!-- Users -->
 <h2>Users</h2>
-<table><thead><tr><th>Email</th><th>Name</th><th>Messages</th><th>Seit</th></tr></thead><tbody id="users-body"></tbody></table>
+<div id="nudge-status" class="status-msg"></div>
+<table><thead><tr><th>Email</th><th>Name</th><th>Msgs</th><th>Rechnung</th><th>Vergleich</th><th>Seit</th><th>Nudge</th><th></th></tr></thead><tbody id="users-body"></tbody></table>
 
 <!-- Allowlist -->
 <h2>Registration Allowlist</h2>
 <div class="allowlist-panel">
   <p style="margin-bottom:12px;font-size:0.85rem;color:var(--warm-grau)">
     Neue Waitlist-Eintraege findest du in
-    <a href="https://formspree.io/f/xwvrknzy" target="_blank" style="color:var(--terracotta);font-weight:600">Formspree Inbox</a>
+    <a href="https://formspree.io/forms/xwvrknzy/submissions" target="_blank" style="color:var(--terracotta);font-weight:600">Formspree Inbox</a>
     — Email kopieren und hier freigeben.
   </p>
   <div id="allowlist-status" class="status-msg"></div>
@@ -93,6 +100,18 @@
     <button class="btn btn-add" onclick="addEmail()">Freigeben</button>
   </div>
   <table><thead><tr><th>Email</th><th>Hinzugefuegt von</th><th>Datum</th><th></th></tr></thead><tbody id="allowlist-body"></tbody></table>
+</div>
+
+<!-- Waitlist -->
+<h2>Waitlist</h2>
+<div class="allowlist-panel">
+  <p style="margin-bottom:12px;font-size:0.85rem;color:var(--warm-grau)">Menschen, die sich auf der Warteliste eingetragen haben.</p>
+  <div id="waitlist-import-status" class="status-msg"></div>
+  <div id="paste-zone" style="border:2px dashed var(--warm-grau);border-radius:8px;padding:16px;text-align:center;color:var(--warm-grau);font-size:0.85rem;margin-bottom:16px;cursor:pointer;transition:border-color 0.2s;" tabindex="0">
+    Formspree-Screenshot hier einfuegen (Ctrl+V) oder klicken zum Hochladen
+    <input type="file" id="waitlist-file" accept="image/*" style="display:none" />
+  </div>
+  <table><thead><tr><th>Email</th><th>Name</th><th>Datum</th><th></th></tr></thead><tbody id="waitlist-body"></tbody></table>
 </div>
 
 <!-- Activity -->
@@ -119,17 +138,47 @@ function fmtDate(s) {
   return d.toLocaleDateString('de-AT') + ' ' + d.toLocaleTimeString('de-AT', {hour:'2-digit',minute:'2-digit'});
 }
 
+function nudgeBtn(u) {
+  const created = u.created_at ? new Date(u.created_at + 'Z') : null;
+  const ageMs = created ? Date.now() - created.getTime() : 0;
+  const ageDays = ageMs / (1000 * 60 * 60 * 24);
+  const isOldEnough = ageDays >= 3;
+  const alreadyNudged = !!u.nudged_at;
+
+  if (alreadyNudged) {
+    return `<button class="btn" style="font-size:0.75rem;padding:4px 10px;background:none;color:var(--green);border:1px solid var(--green);cursor:default;" disabled title="Gesendet ${fmtDate(u.nudged_at)}">Gesendet</button>`;
+  }
+  if (!isOldEnough) {
+    return `<button class="btn" style="font-size:0.75rem;padding:4px 10px;background:none;color:var(--warm-grau);border:1px solid var(--warm-grau);cursor:default;" disabled title="Erst ${Math.ceil(ageDays)} Tag(e) — noch nicht 3 Tage">Zu frueh</button>`;
+  }
+  return `<button class="btn btn-add" style="font-size:0.75rem;padding:4px 10px;" onclick="sendNudge(${u.id}, '${esc(u.email)}')">Nudge</button>`;
+}
+
+function statusDot(ok) {
+  return ok
+    ? '<span style="color:var(--green);font-weight:600;" title="Ja">&#10003;</span>'
+    : '<span style="color:var(--warm-grau);" title="Nein">—</span>';
+}
+
 async function loadOverview() {
   const d = await api('/overview');
   document.getElementById('kpi-users').textContent = d.total_users;
+  document.getElementById('kpi-waitlist').textContent = d.total_waitlist;
   document.getElementById('kpi-messages').textContent = d.total_messages;
   document.getElementById('kpi-conversations').textContent = d.total_conversations;
+  document.getElementById('kpi-invoices').textContent = d.users_with_invoice;
+  document.getElementById('kpi-comparisons').textContent = d.users_with_comparison;
+  document.getElementById('kpi-savings').textContent = d.total_savings_eur > 0 ? `${Math.round(d.total_savings_eur)} €` : '-';
   const tbody = document.getElementById('users-body');
   tbody.innerHTML = d.users.map(u => `<tr>
     <td class="mono">${esc(u.email)}</td>
     <td>${esc(u.name || '-')}</td>
     <td class="mono">${u.message_count}</td>
+    <td style="text-align:center">${statusDot(u.has_invoice)}</td>
+    <td style="text-align:center">${statusDot(u.has_comparison)}</td>
     <td>${fmtDate(u.created_at)}</td>
+    <td>${nudgeBtn(u)}</td>
+    <td><button class="btn btn-remove" onclick="deleteUser(${u.id}, '${esc(u.email)}')">Loeschen</button></td>
   </tr>`).join('');
 }
 
@@ -189,7 +238,121 @@ async function removeEmail(email) {
   setTimeout(() => st.className = 'status-msg', 3000);
 }
 
-function loadAll() { loadOverview(); loadActivity(); loadAllowlist(); }
+async function deleteUser(userId, email) {
+  if (!confirm(`${email} und alle Daten wirklich loeschen? Das kann nicht rueckgaengig gemacht werden!`)) return;
+  const st = document.getElementById('allowlist-status');
+  try {
+    await api(`/users/${userId}`, { method: 'DELETE' });
+    st.className = 'status-msg status-ok';
+    st.textContent = `${email} geloescht`;
+    loadAll();
+  } catch (e) {
+    st.className = 'status-msg status-err';
+    st.textContent = e.message;
+  }
+  setTimeout(() => st.className = 'status-msg', 3000);
+}
+
+async function loadWaitlist() {
+  const rows = await api('/waitlist');
+  const tbody = document.getElementById('waitlist-body');
+  tbody.innerHTML = rows.length === 0
+    ? '<tr><td colspan="4" style="text-align:center;color:var(--warm-grau)">Noch keine Eintraege</td></tr>'
+    : rows.map(w => `<tr>
+    <td class="mono">${esc(w.email)}</td>
+    <td>${esc(w.name || '-')}</td>
+    <td>${fmtDate(w.created_at)}</td>
+    <td><button class="btn btn-add" style="font-size:0.75rem;padding:4px 10px;" onclick="promoteToAllowlist('${esc(w.email)}')">Freigeben</button></td>
+  </tr>`).join('');
+}
+
+async function promoteToAllowlist(email) {
+  const st = document.getElementById('allowlist-status');
+  try {
+    const res = await api('/allowlist', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({email}) });
+    st.className = 'status-msg status-ok';
+    st.textContent = `${email} freigeschaltet` + (res.email_sent ? ' — Einladungsmail gesendet!' : '');
+    loadAllowlist();
+    loadWaitlist();
+  } catch (e) {
+    st.className = 'status-msg status-err';
+    st.textContent = e.message;
+  }
+  setTimeout(() => st.className = 'status-msg', 4000);
+}
+
+async function sendNudge(userId, email) {
+  if (!confirm(`Feedback-Nudge an ${email} senden?`)) return;
+  const st = document.getElementById('nudge-status');
+  try {
+    const res = await api(`/send-nudge/${userId}`, { method: 'POST' });
+    st.className = 'status-msg status-ok';
+    st.textContent = res.email_sent ? `Nudge an ${email} gesendet!` : `Nudge an ${email} fehlgeschlagen.`;
+    loadOverview();
+  } catch (e) {
+    st.className = 'status-msg status-err';
+    st.textContent = e.message;
+  }
+  setTimeout(() => st.className = 'status-msg', 4000);
+}
+
+// --- Waitlist Screenshot Import ---
+const pasteZone = document.getElementById('paste-zone');
+const fileInput = document.getElementById('waitlist-file');
+
+pasteZone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', (e) => {
+  if (e.target.files[0]) importImage(e.target.files[0]);
+});
+
+document.addEventListener('paste', (e) => {
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      e.preventDefault();
+      importImage(item.getAsFile());
+      return;
+    }
+  }
+});
+
+async function importImage(file) {
+  const st = document.getElementById('waitlist-import-status');
+  st.className = 'status-msg status-ok';
+  st.textContent = 'Emails werden extrahiert...';
+  pasteZone.style.borderColor = 'var(--terracotta)';
+
+  try {
+    const b64 = await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.readAsDataURL(file);
+    });
+
+    const res = await api('/waitlist/import', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ image_data: b64, media_type: file.type || 'image/png' }),
+    });
+
+    st.className = 'status-msg status-ok';
+    const parts = [];
+    if (res.imported > 0) parts.push(`${res.imported} importiert (${res.imported_emails.join(', ')})`);
+    if (res.skipped > 0) parts.push(`${res.skipped} bereits vorhanden`);
+    st.textContent = parts.length > 0 ? parts.join(' — ') : 'Keine Emails im Screenshot gefunden.';
+
+    loadWaitlist();
+    loadOverview();
+  } catch (e) {
+    st.className = 'status-msg status-err';
+    st.textContent = e.message;
+  }
+  pasteZone.style.borderColor = '';
+  setTimeout(() => st.className = 'status-msg', 8000);
+}
+
+function loadAll() { loadOverview(); loadActivity(); loadAllowlist(); loadWaitlist(); }
 loadAll();
 setInterval(loadAll, 60000);
 </script>

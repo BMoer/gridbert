@@ -44,9 +44,17 @@ class GridbertAgent:
 
     def _build_system_prompt(self) -> str:
         """System-Prompt mit User-Memory-Kontext aufbauen."""
-        from gridbert.personality import SYSTEM_PROMPT_V1
+        from datetime import date
 
-        parts = [SYSTEM_PROMPT_V1]
+        from gridbert.prompts import SYSTEM_PROMPT_V1
+
+        today = date.today().strftime("%d.%m.%Y")
+        parts = [
+            SYSTEM_PROMPT_V1,
+            f"## Aktuelles Datum\nHeute ist der {today}. "
+            "Verwende dieses Datum als Referenz für zeitliche Einordnungen "
+            "(z.B. ob ein Tarifstart in der Vergangenheit oder Zukunft liegt).",
+        ]
 
         if self._user_memory:
             memory_lines = "\n".join(

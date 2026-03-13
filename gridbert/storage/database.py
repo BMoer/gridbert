@@ -61,6 +61,7 @@ def _migrate_add_llm_columns(engine) -> None:
         ("llm_provider", "VARCHAR", "''"),
         ("llm_api_key_enc", "TEXT", "''"),
         ("llm_model", "VARCHAR", "''"),
+        ("nudged_at", "TIMESTAMP", "NULL"),
     ]
     with engine.connect() as conn:
         for col_name, col_type, default in migrations:

@@ -45,6 +45,11 @@ UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", str(Path.home() / ".gridbert" / "uploa
 # --- ENTSO-E (spot prices, Phase 3) ------------------------------------------
 ENTSOE_API_KEY: str = os.getenv("ENTSOE_API_KEY", "")
 
+# --- Email (Resend) ----------------------------------------------------------
+RESEND_API_KEY: str = os.getenv("RESEND_API_KEY", "")
+EMAIL_FROM: str = os.getenv("EMAIL_FROM", "Gridbert <gridbert@gridbert.at>")
+APP_URL: str = os.getenv("APP_URL", "https://app.gridbert.at")
+
 # --- Security ----------------------------------------------------------------
 CHAT_RATE_LIMIT: int = int(os.getenv("CHAT_RATE_LIMIT", "10"))  # per user per minute (server key only)
 REGISTRATION_ALLOWLIST: list[str] = [

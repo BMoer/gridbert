@@ -34,6 +34,7 @@ users = Table(
     Column("llm_provider", String, default=""),  # "claude" | "openai" | ""
     Column("llm_api_key_enc", Text, default=""),  # Fernet-encrypted API key
     Column("llm_model", String, default=""),  # e.g. "claude-haiku-4-5-20251001", "gpt-4o"
+    Column("nudged_at", DateTime, nullable=True),  # when feedback nudge was sent
     Column("created_at", DateTime, server_default=func.now()),
 )
 
@@ -113,6 +114,17 @@ registration_allowlist = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("email", String, unique=True, nullable=False),
     Column("added_by", String, default="admin"),
+    Column("created_at", DateTime, server_default=func.now()),
+)
+
+# --- Waitlist -----------------------------------------------------------------
+
+waitlist = Table(
+    "waitlist",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("email", String, unique=True, nullable=False),
+    Column("name", String, default=""),
     Column("created_at", DateTime, server_default=func.now()),
 )
 

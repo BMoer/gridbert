@@ -27,7 +27,7 @@ def get_db() -> Generator[Connection, None, None]:
         yield conn
 
 
-def get_current_user_id(
+def _extract_user_id(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
 ) -> int:
     """JWT Token validieren und User-ID extrahieren."""
@@ -44,6 +44,20 @@ def get_current_user_id(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Ungültiger Token",
         ) from exc
+    return user_id
+
+
+def get_current_user_id(
+    user_id: Annotated[int, Depends(_extract_user_id)],
+    conn: Annotated[Connection, Depends(get_db)],
+) -> int:
+    """JWT validieren UND prüfen ob User noch in DB existiert."""
+    user = get_user_by_id(conn, user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User nicht gefunden",
+        )
     return user_id
 
 

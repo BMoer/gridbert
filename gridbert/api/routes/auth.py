@@ -87,6 +87,13 @@ def register(req: RegisterRequest, conn: DbConn) -> TokenResponse:
     user_id = create_user(conn, email=req.email, password_hash=password_hash, name=req.name)
     token = _create_token(user_id)
 
+    # Fire-and-forget welcome email
+    from gridbert.email import send_email
+    from gridbert.email.templates import welcome_after_registration
+
+    subject, html = welcome_after_registration(req.name)
+    send_email(req.email, subject, html)
+
     return TokenResponse(
         access_token=token,
         user_id=user_id,

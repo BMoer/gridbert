@@ -20,7 +20,6 @@ primary_region = "fra"
 
 [env]
   ENVIRONMENT = "production"
-  DATABASE_URL = "sqlite:////data/gridbert.db"
   UPLOAD_DIR = "/data/uploads"
   CORS_ORIGINS = "https://app.gridbert.at"
 
