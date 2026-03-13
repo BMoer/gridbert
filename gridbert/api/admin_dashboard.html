@@ -82,10 +82,15 @@
 <!-- Allowlist -->
 <h2>Registration Allowlist</h2>
 <div class="allowlist-panel">
+  <p style="margin-bottom:12px;font-size:0.85rem;color:var(--warm-grau)">
+    Neue Waitlist-Eintraege findest du in
+    <a href="https://formspree.io/f/xwvrknzy" target="_blank" style="color:var(--terracotta);font-weight:600">Formspree Inbox</a>
+    — Email kopieren und hier freigeben.
+  </p>
   <div id="allowlist-status" class="status-msg"></div>
   <div class="add-form">
-    <input type="email" id="new-email" placeholder="email@example.com" />
-    <button class="btn btn-add" onclick="addEmail()">Hinzufuegen</button>
+    <input type="email" id="new-email" placeholder="email@example.com" onkeydown="if(event.key==='Enter')addEmail()" />
+    <button class="btn btn-add" onclick="addEmail()">Freigeben</button>
   </div>
   <table><thead><tr><th>Email</th><th>Hinzugefuegt von</th><th>Datum</th><th></th></tr></thead><tbody id="allowlist-body"></tbody></table>
 </div>
