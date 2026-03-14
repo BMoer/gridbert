@@ -880,48 +880,60 @@ def generate_weekly_update(
         '"Gridbert Diary" Update. '
         "Gridbert ist Bens persönliches Lernprojekt — ein "
         "Energie-Agent für österreichische Konsumenten. "
-        "Kein Startup, kein Team, kein Funding. Ben baut das "
-        "alleine.\n\n"
-        "WICHTIG: Die Mail kommt von Ben persönlich, NICHT von "
-        "Gridbert. Schreib in der Ich-Form als Ben.\n\n"
-        "Ton: Direkt, persönlich, technisch wenn nötig aber "
-        "verständlich. Wie ein Freund der erzählt woran er "
-        "gerade arbeitet. Ehrlich über Rückschläge.\n"
+        "Kein Startup, kein Team, kein Funding. Ben baut "
+        "das alleine.\n\n"
+        "WICHTIG: Die Mail kommt von Ben persönlich, NICHT "
+        "von Gridbert. Schreib in der Ich-Form als Ben.\n\n"
+        "Ton: Direkt, persönlich, wie ein Freund der "
+        "erzählt woran er gerade arbeitet. Ehrlich über "
+        "Rückschläge. Technisch wenn nötig aber "
+        "verständlich.\n"
         "NICHT: Marketing-Sprache, Buzzwords, Emoji-Spam, "
-        '"excited to announce".\n'
+        '"excited to announce", steife Überschriften.\n'
         "Sprache: Deutsch.\n\n"
+        "STIL-REFERENZ (Bens echte Stimme):\n"
+        '"""387€ Ersparnis in 30 Nachrichten: Das war die '
+        "erste Woche von Gridbert im Echtbetrieb.\n\n"
+        "Wir haben 8 User, 27 auf der Waitlist, und das "
+        "Admin-Dashboard zeigt mir: 5 Rechnungen analysiert, "
+        "3 Tarifvergleiche gemacht. [...]\n\n"
+        "Interessanteste Insight: Nutzer bringen oft ihre "
+        "Rechnungen weil sie den Vergleichportalen "
+        "misstrauen. [...]\n\n"
+        "Die Frage die mich diese Woche beschäftigt: "
+        'Wie kommen wir zu Smart Meter Daten [...]"""\n\n'
+        "Merkmale dieses Stils:\n"
+        "- Fetter, konkreter Hook als erster Satz "
+        "(Zahl + Ergebnis)\n"
+        "- Fließtext-Absätze, KEINE h3-Überschriften\n"
+        "- Zahlen natürlich in den Text eingewoben\n"
+        '- "Interessanteste Insight:" als Inline-Label\n'
+        "- Offene Frage am Ende die zum Nachdenken anregt\n"
+        "- Kein formeller Abschluss (kein 'lg, Ben')\n"
+        "- Kurz. Max 150 Wörter.\n\n"
         "Generiere als JSON:\n\n"
-        '1. "mail_subject": Format "Gridbert Diary: [konkrete '
-        'Highlights, kommasepariert]". Kein Clickbait, keine '
-        "Emoji.\n\n"
-        '2. "mail_body": HTML mit diesen Teilen:\n'
-        "   a) Platzhalter-Intro: Einen kurzen Absatz als "
-        "Platzhalter den Ben durch seinen eigenen Text ersetzt. "
-        "Markiere mit [INTRO — Ben schreibt hier selbst].\n\n"
-        '   b) <h3 style="color:#C4633F;margin:20px 0 8px;">'
-        "Was passiert ist</h3>\n"
-        "   Fasse die Commits + Activity in 2-4 Fließtext-Sätzen "
-        "zusammen. Was hat sich für User geändert? Keine "
-        "Commit-Messages copy-pasten.\n"
-        "   Dann ein eigener Absatz mit konkreten Zahlen: "
-        '"Konkrete Zahlen: X neue User, Y auf Waitlist, Z€ '
-        "Ersparnis identifiziert. N Rechnungen analysiert, "
-        "M Tarifvergleiche. LLM-Kosten: $X.\"\n\n"
-        '   c) <h3 style="color:#C4633F;margin:20px 0 8px;">'
-        "Was ich gelernt hab</h3>\n"
-        "   Ein konkretes Learning oder Insight aus der Woche. "
-        "Kann technisch oder marktbezogen sein. 2-3 Sätze.\n\n"
-        '   d) <h3 style="color:#C4633F;margin:20px 0 8px;">'
-        "Was als nächstes kommt</h3>\n"
-        "   1-2 konkrete nächste Schritte.\n\n"
-        '   e) Abschluss: "<p>schön, dass Ihr dabei seid,</p>'
-        "<p>lg,<br>Ben</p>\"\n\n"
-        "   Formatierung: Einfaches HTML (<p>, <h3>, <br>). "
-        "Kurze Absätze. Kein Newsletter-Bloat. Max 250 Wörter.\n\n"
+        '1. "mail_subject": Format "Gridbert Diary #N: '
+        "[konkreter Hook]\". Kein Clickbait, keine Emoji."
+        "\n\n"
+        '2. "mail_body": HTML-Fließtext:\n'
+        "   a) Platzhalter: <p><em>[INTRO — Ben schreibt "
+        "hier selbst]</em></p>\n"
+        "   b) Fetter Hook-Satz als <p><strong>...</strong>"
+        "</p>\n"
+        "   c) 1-2 Absätze mit Kontext + konkreten Zahlen "
+        "(User, Waitlist, Ersparnis, Analysen, "
+        "LLM-Kosten)\n"
+        '   d) <p><strong>Interessanteste Insight:</strong>'
+        " ...</p>\n"
+        "   e) Offene Frage als letzter Absatz\n"
+        "   f) Abschluss: <p>lg,<br>Ben</p>\n"
+        "   Formatierung: Nur <p>, <strong>, <em>, <br>. "
+        "KEINE <h3>. Max 200 Wörter.\n\n"
         '3. "linkedin_post": LinkedIn-Post auf Deutsch. '
-        "Max 1.300 Zeichen. Konkretes Ergebnis oder Insight als "
-        "Hook, 2-3 Zeilen Kontext, Frage an die Community. "
-        "Hashtags: #energiewende #buildinpublic #österreich\n\n"
+        "Max 1.300 Zeichen. Gleicher Stil wie oben: "
+        "konkreter Hook, Fließtext, Insight, offene Frage. "
+        "Hashtags: #energiewende #buildinpublic "
+        "#österreich\n\n"
         "Antworte NUR mit validem JSON, kein Markdown, "
         "keine Backticks."
     )
