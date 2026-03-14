@@ -1001,14 +1001,16 @@ def send_weekly_update(
     failed = 0
     errors: list[str] = []
 
+    from_addr = "Ben Moerzinger <ben@gridbert.at>"
+
     for email in all_recipients:
-        ok = send_email(email, req.subject, html)
+        ok = send_email(email, req.subject, html, from_addr=from_addr)
         if ok:
             sent += 1
         else:
             failed += 1
             errors.append(email)
-        _time.sleep(0.1)  # Resend rate limit
+        _time.sleep(0.6)  # Resend: max 2 req/sec
 
     # Persist to history
     from gridbert.storage.schema import weekly_updates
