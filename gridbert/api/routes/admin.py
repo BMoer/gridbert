@@ -16,7 +16,7 @@ from jose import JWTError, jwt
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import desc, func, select
 
-from gridbert.api.deps import DbConn, JWT_ALGORITHM
+from gridbert.api.deps import JWT_ALGORITHM, DbConn
 from gridbert.config import SECRET_KEY
 from gridbert.storage.schema import (
     analyses,
@@ -753,6 +753,248 @@ def admin_summary(
         summary_text = None
 
     return {"summary": summary_text, "raw": raw_stats}
+
+
+# --- Weekly Update -----------------------------------------------------------
+
+class WeeklyUpdateRequest(BaseModel):
+    days: int = 7
+    custom_note: str = ""
+
+
+class WeeklyUpdateSendRequest(BaseModel):
+    subject: str
+    body_html: str
+
+
+@router.post("/weekly-update/generate")
+def generate_weekly_update(
+    req: WeeklyUpdateRequest,
+    conn: DbConn,
+    authorization: str | None = Header(None),
+) -> dict[str, Any]:
+    """Generate a weekly update draft (mail + LinkedIn) from commits + activity."""
+    _verify_admin(conn, authorization)
+    import json as _json
+    import time as _time
+
+    import httpx
+
+    from gridbert.config import ANTHROPIC_API_KEY, GITHUB_REPO
+    from gridbert.storage.schema import api_usage, waitlist
+
+    # --- Step 1: GitHub commits ---
+    commits_list: list[dict[str, str]] = []
+    try:
+        since = (datetime.now(timezone.utc) - timedelta(days=req.days)).isoformat()
+        resp = httpx.get(
+            f"https://api.github.com/repos/{GITHUB_REPO}/commits",
+            params={"since": since, "per_page": 100},
+            timeout=10.0,
+        )
+        if resp.status_code == 200:
+            for c in resp.json():
+                commits_list.append({
+                    "message": c["commit"]["message"].split("\n")[0],
+                    "date": c["commit"]["author"]["date"][:10],
+                })
+    except Exception:
+        log.exception("Failed to fetch GitHub commits")
+
+    # --- Step 2: App activity ---
+    since_dt = datetime.now(timezone.utc) - timedelta(days=req.days)
+
+    new_users = conn.execute(
+        select(func.count()).select_from(users).where(users.c.created_at >= since_dt)
+    ).scalar() or 0
+
+    new_waitlist = conn.execute(
+        select(func.count()).select_from(waitlist).where(waitlist.c.created_at >= since_dt)
+    ).scalar() or 0
+
+    new_messages = conn.execute(
+        select(func.count()).select_from(messages).where(messages.c.created_at >= since_dt)
+    ).scalar() or 0
+
+    new_conversations = conn.execute(
+        select(func.count()).select_from(conversations).where(conversations.c.created_at >= since_dt)
+    ).scalar() or 0
+
+    cost_usd = conn.execute(
+        select(func.coalesce(func.sum(api_usage.c.cost_usd), 0.0)).where(
+            api_usage.c.created_at >= since_dt
+        )
+    ).scalar() or 0.0
+
+    # Widget-based stats
+    widget_rows = conn.execute(
+        select(dashboard_widgets.c.widget_type, dashboard_widgets.c.config)
+        .where(dashboard_widgets.c.created_at >= since_dt)
+    ).all()
+
+    invoices_count = sum(1 for wt, _ in widget_rows if wt == "invoice_summary")
+    comparisons_count = sum(1 for wt, _ in widget_rows if wt == "tariff_comparison")
+
+    savings_total = 0.0
+    for wt, cfg_raw in widget_rows:
+        if wt != "tariff_comparison":
+            continue
+        try:
+            cfg = _json.loads(cfg_raw) if isinstance(cfg_raw, str) else cfg_raw
+            val = cfg.get("savings_eur") or cfg.get("max_ersparnis_eur") or cfg.get("ersparnis_eur")
+            if val is not None:
+                savings_total += float(val)
+        except (ValueError, TypeError, AttributeError):
+            continue
+
+    # Recipients count
+    total_waitlist = conn.execute(select(func.count()).select_from(waitlist)).scalar() or 0
+    total_users = conn.execute(select(func.count()).select_from(users)).scalar() or 0
+    recipients_count = total_waitlist + total_users  # dedup happens at send time
+
+    # --- Step 3: LLM generates mail + LinkedIn ---
+    if not ANTHROPIC_API_KEY:
+        raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY not configured")
+
+    commits_text = "\n".join(f"- {c['date']}: {c['message']}" for c in commits_list) or "Keine Commits in diesem Zeitraum."
+
+    user_message = (
+        f"Zeitraum: letzte {req.days} Tage\n\n"
+        f"GitHub Commits:\n{commits_text}\n\n"
+        f"App Activity:\n"
+        f"- Neue User: {new_users}\n"
+        f"- Neue Waitlist: {new_waitlist}\n"
+        f"- Nachrichten: {new_messages}\n"
+        f"- Conversations: {new_conversations}\n"
+        f"- LLM-Kosten: ${cost_usd:.2f}\n"
+        f"- Rechnungen analysiert: {invoices_count}\n"
+        f"- Tarifvergleiche: {comparisons_count}\n"
+        f"- Gesamtersparnis identifiziert: {round(savings_total)}€\n"
+    )
+    if req.custom_note:
+        user_message += f"\nBens Notiz: {req.custom_note}"
+
+    system_prompt = (  # noqa: E501
+        "Du bist Ben Moerzinger und schreibst dein wöchentliches "
+        '"Building Gridbert" Update. '
+        "Gridbert ist dein persönliches Lernprojekt — ein Energie-Agent "
+        "für österreichische Konsumenten. "
+        "Kein Startup, kein Team, kein Funding. Du baust das alleine um "
+        "LLM-Agents, den österreichischen Energiemarkt und "
+        "strukturiertes Domain-Wissen zu lernen.\n\n"
+        "Dein Ton: Direkt, technisch wenn nötig aber verständlich, "
+        "persönlich, ehrlich über Rückschläge. "
+        'Nicht: Marketing-Sprache, Buzzwords, "excited to announce", '
+        "Emoji-Spam.\n"
+        "Sprache: Deutsch.\n\n"
+        "Generiere zwei Outputs als JSON:\n\n"
+        '1. "mail_subject": Betreffzeile für die E-Mail '
+        "(kurz, konkret, kein Clickbait)\n"
+        '2. "mail_body": HTML-Body für die E-Mail. 3 Abschnitte:\n'
+        '   - "Was passiert ist" — konkrete Änderungen der Woche, '
+        "aus Commits + Activity abgeleitet. "
+        "Keine Commit-Messages copy-pasten, sondern in 2-4 Sätzen "
+        "zusammenfassen was sich für User ändert.\n"
+        '   - "Was ich gelernt hab" — ein Insight oder eine Erkenntnis '
+        "aus der Woche. "
+        "Kann technisch sein, kann Markt-bezogen sein.\n"
+        '   - "Was als nächstes kommt" — 1-2 konkrete nächste Schritte.\n'
+        "   Formatierung: Einfaches HTML, kurze Absätze, "
+        "kein Newsletter-Bloat. Max 200 Wörter.\n"
+        '3. "linkedin_post": LinkedIn-Post auf Deutsch. '
+        "Max 1.300 Zeichen (LinkedIn-Limit vor \"mehr anzeigen\"). "
+        "Kein \"Excited to share\". Stattdessen: konkretes Ergebnis "
+        "oder Insight als Hook, dann 2-3 Zeilen Kontext, dann Frage "
+        "an die Community. Hashtags: "
+        "#energiewende #buildinpublic #österreich\n\n"
+        "Antworte NUR mit validem JSON, kein Markdown, keine Backticks."
+    )
+
+    try:
+        import anthropic
+
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=1500,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_message}],
+        )
+        raw_text = response.content[0].text if response.content else "{}"
+
+        # Strip ```json fences if LLM adds them
+        cleaned = raw_text.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
+        if cleaned.endswith("```"):
+            cleaned = cleaned[:-3]
+        cleaned = cleaned.strip()
+
+        result = _json.loads(cleaned)
+    except (_json.JSONDecodeError, Exception) as exc:
+        log.exception("Weekly update LLM call failed")
+        raise HTTPException(
+            status_code=500,
+            detail="LLM-Generierung fehlgeschlagen. Bitte erneut versuchen.",
+        ) from exc
+
+    return {
+        "mail_subject": result.get("mail_subject", "Building Gridbert — Weekly Update"),
+        "mail_body": result.get("mail_body", ""),
+        "linkedin_post": result.get("linkedin_post", ""),
+        "meta": {
+            "commits_count": len(commits_list),
+            "period_days": req.days,
+            "recipients_count": recipients_count,
+        },
+    }
+
+
+@router.post("/weekly-update/send")
+def send_weekly_update(
+    req: WeeklyUpdateSendRequest,
+    conn: DbConn,
+    authorization: str | None = Header(None),
+) -> dict[str, Any]:
+    """Send the weekly update email to all waitlist + user recipients."""
+    _verify_admin(conn, authorization)
+    import time as _time
+
+    from gridbert.email import send_email
+    from gridbert.email.templates import weekly_update
+    from gridbert.storage.schema import waitlist
+
+    # Collect + deduplicate recipients
+    waitlist_emails = {
+        r["email"]
+        for r in conn.execute(select(waitlist.c.email)).mappings().all()
+    }
+    user_emails = {
+        r["email"]
+        for r in conn.execute(select(users.c.email)).mappings().all()
+    }
+    all_recipients = sorted(waitlist_emails | user_emails)
+
+    if not all_recipients:
+        return {"sent": 0, "failed": 0, "errors": []}
+
+    # Wrap in branded template
+    html = weekly_update(req.body_html)
+
+    sent = 0
+    failed = 0
+    errors: list[str] = []
+
+    for email in all_recipients:
+        ok = send_email(email, req.subject, html)
+        if ok:
+            sent += 1
+        else:
+            failed += 1
+            errors.append(email)
+        _time.sleep(0.1)  # Resend rate limit
+
+    return {"sent": sent, "failed": failed, "errors": errors}
 
 
 # --- Switching Queue ----------------------------------------------------------

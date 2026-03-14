@@ -62,6 +62,9 @@ REGISTRATION_ALLOWLIST: list[str] = [
     e.strip().lower() for e in os.getenv("REGISTRATION_ALLOWLIST", "").split(",") if e.strip()
 ]
 
+# --- GitHub (for weekly updates) ------------------------------------------
+GITHUB_REPO: str = os.getenv("GITHUB_REPO", "BMoer/gridbert")
+
 # --- Admin ----------------------------------------------------------------
 ADMIN_EMAILS: list[str] = [
     e.strip().lower() for e in os.getenv("ADMIN_EMAILS", "").split(",") if e.strip()

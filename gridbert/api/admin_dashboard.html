@@ -162,6 +162,35 @@
   <div id="summary-meta" class="summary-meta"></div>
 </div>
 
+<!-- Weekly Update -->
+<h2>Weekly Update</h2>
+<div class="allowlist-panel">
+  <div style="display:flex;gap:8px;margin-bottom:12px;align-items:end;">
+    <div style="flex:1;">
+      <label style="font-size:0.8rem;color:var(--warm-grau);">Optionale Notiz:</label>
+      <input type="text" id="update-note" placeholder="z.B. 'E-Control API Zugang erhalten'"
+             style="width:100%;padding:10px;border:1px solid var(--warm-grau);border-radius:6px;font-family:inherit;">
+    </div>
+    <button class="btn btn-add" onclick="generateUpdate()" id="btn-generate">Update generieren</button>
+  </div>
+  <div id="update-preview" style="display:none;">
+    <h3 style="font-size:0.95rem;margin-bottom:8px;">Mail Preview</h3>
+    <input type="text" id="update-subject" style="width:100%;padding:8px;margin-bottom:8px;border:1px solid var(--warm-grau);border-radius:6px;font-family:inherit;font-weight:600;">
+    <div id="update-mail-body" contenteditable="true"
+         style="background:white;border:1px solid var(--warm-grau);border-radius:6px;padding:12px;margin-bottom:12px;min-height:150px;font-size:0.9rem;line-height:1.6;">
+    </div>
+    <p style="font-size:0.8rem;color:var(--warm-grau);margin-bottom:8px;" id="update-recipients">Empfaenger: --</p>
+    <button class="btn btn-add" onclick="sendUpdate()" id="btn-send">An alle senden</button>
+    <h3 style="font-size:0.95rem;margin:16px 0 8px;">LinkedIn Post</h3>
+    <textarea id="update-linkedin" rows="8"
+              style="width:100%;padding:10px;border:1px solid var(--warm-grau);border-radius:6px;font-family:inherit;font-size:0.9rem;resize:vertical;"></textarea>
+    <button class="btn" style="background:var(--ink);color:var(--kreide);margin-top:8px;"
+            onclick="navigator.clipboard.writeText(document.getElementById('update-linkedin').value);this.textContent='Kopiert!';setTimeout(()=>this.textContent='LinkedIn-Post kopieren',2000)">
+      LinkedIn-Post kopieren
+    </button>
+  </div>
+</div>
+
 <!-- KPIs -->
 <div class="kpi-row">
   <div class="kpi"><div class="kpi-value" id="kpi-waitlist">-</div><div class="kpi-label">Waitlist</div></div>
@@ -725,6 +754,58 @@ async function downloadVollmacht(id) {
     URL.revokeObjectURL(url);
   } catch (e) {
     alert(e.message);
+  }
+}
+
+// --- Weekly Update ---
+async function generateUpdate() {
+  const btn = document.getElementById('btn-generate');
+  btn.textContent = 'Generiere...';
+  btn.disabled = true;
+  try {
+    const note = document.getElementById('update-note').value;
+    const data = await api('/weekly-update/generate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({custom_note: note}),
+    });
+    document.getElementById('update-subject').value = data.mail_subject;
+    document.getElementById('update-mail-body').innerHTML = data.mail_body;
+    document.getElementById('update-linkedin').value = data.linkedin_post;
+    document.getElementById('update-recipients').textContent =
+      `Empfaenger: ${data.meta.recipients_count} (Waitlist + User) \u00b7 ${data.meta.commits_count} Commits`;
+    document.getElementById('update-preview').style.display = 'block';
+  } catch (e) {
+    alert('Fehler: ' + e.message);
+  } finally {
+    btn.textContent = 'Update generieren';
+    btn.disabled = false;
+  }
+}
+
+async function sendUpdate() {
+  if (!confirm('Wirklich an alle senden?')) return;
+  const btn = document.getElementById('btn-send');
+  btn.textContent = 'Sende...';
+  btn.disabled = true;
+  try {
+    const data = await api('/weekly-update/send', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        subject: document.getElementById('update-subject').value,
+        body_html: document.getElementById('update-mail-body').innerHTML,
+      }),
+    });
+    btn.textContent = `Gesendet! (${data.sent} Mails)`;
+    if (data.failed > 0) {
+      btn.textContent += ` — ${data.failed} fehlgeschlagen`;
+    }
+    setTimeout(() => { btn.textContent = 'An alle senden'; btn.disabled = false; }, 5000);
+  } catch (e) {
+    alert('Fehler: ' + e.message);
+    btn.textContent = 'An alle senden';
+    btn.disabled = false;
   }
 }
 

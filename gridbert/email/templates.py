@@ -139,6 +139,17 @@ was nicht? Antworte einfach auf diese Mail oder schreib mir im Chat.</p>
     return subject, body
 
 
+def weekly_update(body_html: str) -> str:
+    """Wrap weekly update HTML in branded container with unsubscribe hint."""
+    unsubscribe = (
+        f'<p style="font-size:0.8rem;color:{_WARM_GRAU};margin-top:24px;'
+        f'border-top:1px solid {_WARM_GRAU};padding-top:12px;">'
+        "Du bekommst diese Mail weil du dich für Gridbert interessiert hast. "
+        "Antwort mit 'abmelden' um keine Updates mehr zu bekommen.</p>"
+    )
+    return _wrap(body_html + unsubscribe)
+
+
 def switching_initiated(
     name: str,
     target_lieferant: str,
