@@ -1013,7 +1013,7 @@ def send_weekly_update(
     failed = 0
     errors: list[str] = []
 
-    from_addr = "Ben Moerzinger <ben@gridbert.at>"
+    from_addr = "Ben from Gridbert <ben@gridbert.at>"
 
     for email in all_recipients:
         ok = send_email(email, req.subject, html, from_addr=from_addr)
