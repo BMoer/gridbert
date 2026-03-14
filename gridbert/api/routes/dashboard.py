@@ -22,6 +22,7 @@ _VALID_WIDGET_TYPES = {
     "invoice_summary", "savings_summary", "tariff_comparison",
     "consumption_chart", "consumption_kpi", "spot_price",
     "battery_sim", "pv_sim", "gas_comparison", "beg_comparison",
+    "switching_status",
 }
 
 

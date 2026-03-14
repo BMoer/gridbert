@@ -9,7 +9,7 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -52,7 +52,6 @@ def create_app() -> FastAPI:
 
     # Security response headers
     from starlette.middleware.base import BaseHTTPMiddleware
-    from starlette.requests import Request
     from starlette.responses import Response
 
     class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -83,6 +82,16 @@ def create_app() -> FastAPI:
     @app.get("/api/health")
     def health():
         return {"status": "ok", "version": "1.0.0"}
+
+    # admin.gridbert.at → redirect root to admin dashboard
+    from starlette.responses import RedirectResponse
+
+    @app.get("/")
+    def root_redirect(request: Request):  # noqa: F811
+        if request.headers.get("host", "").startswith("admin."):
+            return RedirectResponse(url="/api/admin/dashboard")
+        # For non-admin hosts, let static files handle it (or return health)
+        return {"status": "ok"}
 
     # In Produktion: Frontend-Build als statische Dateien servieren
     # (disabled on Fly.io where SERVE_STATIC=false — Vercel serves the frontend)

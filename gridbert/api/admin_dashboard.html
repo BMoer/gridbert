@@ -177,6 +177,26 @@
   <div class="kpi"><div class="kpi-value" id="kpi-llm-cost" style="color:var(--terracotta)">-</div><div class="kpi-label">LLM Kosten (USD)</div></div>
 </div>
 
+<!-- Switching Queue -->
+<h2>Wechsel-Queue</h2>
+<div class="allowlist-panel">
+  <div id="switch-status" class="status-msg"></div>
+  <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+    <button class="btn" style="font-size:0.8rem;padding:6px 14px;background:var(--ink);color:var(--kreide);" onclick="loadSwitches()">Alle</button>
+    <button class="btn" style="font-size:0.8rem;padding:6px 14px;background:var(--terracotta);color:white;" onclick="loadSwitches('pending')">Offen</button>
+    <button class="btn" style="font-size:0.8rem;padding:6px 14px;background:var(--green);color:white;" onclick="loadSwitches('completed')">Erledigt</button>
+  </div>
+  <div class="kpi-row" id="switch-kpis" style="display:none;">
+    <div class="kpi"><div class="kpi-value" id="kpi-sw-pending" style="color:var(--terracotta)">-</div><div class="kpi-label">Offen</div></div>
+    <div class="kpi"><div class="kpi-value" id="kpi-sw-progress" style="color:var(--ink)">-</div><div class="kpi-label">In Bearbeitung</div></div>
+    <div class="kpi"><div class="kpi-value" id="kpi-sw-completed" style="color:var(--green)">-</div><div class="kpi-label">Erledigt</div></div>
+    <div class="kpi"><div class="kpi-value" id="kpi-sw-total">-</div><div class="kpi-label">Gesamt</div></div>
+  </div>
+  <div class="table-scroll">
+  <table><thead><tr><th>ID</th><th>User</th><th>Von</th><th>Nach</th><th>Ersparnis</th><th>Status</th><th>Vollmacht</th><th>Datum</th><th></th></tr></thead><tbody id="switches-body"></tbody></table>
+  </div>
+</div>
+
 <!-- Users -->
 <h2>Users</h2>
 <div id="nudge-status" class="status-msg"></div>
@@ -619,7 +639,96 @@ async function importImage(file) {
   setTimeout(() => st.className = 'status-msg', 8000);
 }
 
-function loadAll() { loadOverview(); loadActivity(); loadAllowlist(); loadWaitlist(); }
+// --- Switching Queue ---
+async function loadSwitches(statusFilter) {
+  const path = statusFilter ? `/switches?status=${statusFilter}` : '/switches';
+  try {
+    const data = await api(path);
+    const stats = data.stats || {};
+    const kpis = document.getElementById('switch-kpis');
+    kpis.style.display = 'flex';
+    document.getElementById('kpi-sw-pending').textContent = stats.pending || 0;
+    document.getElementById('kpi-sw-progress').textContent = stats.in_progress || 0;
+    document.getElementById('kpi-sw-completed').textContent = stats.completed || 0;
+    document.getElementById('kpi-sw-total').textContent = stats.total || 0;
+
+    const tbody = document.getElementById('switches-body');
+    const requests = data.requests || [];
+    if (requests.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--warm-grau)">Keine Wechsel-Antraege</td></tr>';
+      return;
+    }
+    tbody.innerHTML = requests.map(r => {
+      const statusColor = r.status === 'completed' ? 'var(--green)' : r.status === 'pending' ? 'var(--terracotta)' : r.status === 'in_progress' ? 'var(--ink)' : 'var(--warm-grau)';
+      const statusLabel = {pending: 'Offen', in_progress: 'In Bearbeitung', completed: 'Erledigt', cancelled: 'Storniert'}[r.status] || r.status;
+      return `<tr>
+        <td class="mono">#${r.id}</td>
+        <td>${esc(r.user_display_name || r.user_name || '')} <span class="mono" style="font-size:0.75rem;color:var(--warm-grau)">${esc(r.user_email || r.email)}</span></td>
+        <td>${esc(r.current_lieferant || '-')}</td>
+        <td><strong>${esc(r.target_lieferant)}</strong><br><span style="font-size:0.8rem;color:var(--warm-grau)">${esc(r.target_tarif)}</span></td>
+        <td class="mono" style="color:var(--green);font-weight:600">${r.savings_eur > 0 ? Math.round(r.savings_eur) + ' \u20AC' : '-'}</td>
+        <td><span style="color:${statusColor};font-weight:600">${statusLabel}</span></td>
+        <td>${r.vollmacht_file_id ? '<a href="#" onclick="downloadVollmacht(' + r.id + ');return false;" style="color:var(--terracotta)">PDF</a>' : '-'}</td>
+        <td style="white-space:nowrap">${fmtDate(r.created_at)}</td>
+        <td>${switchActions(r)}</td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    const st = document.getElementById('switch-status');
+    st.className = 'status-msg status-err';
+    st.textContent = e.message;
+    setTimeout(() => st.className = 'status-msg', 3000);
+  }
+}
+
+function switchActions(r) {
+  if (r.status === 'completed' || r.status === 'cancelled') return '';
+  const btns = [];
+  if (r.status === 'pending') {
+    btns.push(`<button class="btn btn-add" style="font-size:0.75rem;padding:4px 10px;" onclick="updateSwitch(${r.id},'in_progress')">Starten</button>`);
+  }
+  if (r.status === 'in_progress') {
+    btns.push(`<button class="btn" style="font-size:0.75rem;padding:4px 10px;background:var(--green);color:white;" onclick="updateSwitch(${r.id},'completed')">Erledigt</button>`);
+  }
+  btns.push(`<button class="btn btn-remove" style="font-size:0.75rem;padding:4px 8px;" onclick="updateSwitch(${r.id},'cancelled')">Storno</button>`);
+  return btns.join(' ');
+}
+
+async function updateSwitch(id, newStatus) {
+  const labels = {in_progress: 'starten', completed: 'als erledigt markieren', cancelled: 'stornieren'};
+  if (!confirm(`Wechsel #${id} wirklich ${labels[newStatus] || newStatus}?`)) return;
+  const st = document.getElementById('switch-status');
+  try {
+    const res = await api(`/switches/${id}/status`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({status: newStatus}),
+    });
+    st.className = 'status-msg status-ok';
+    st.textContent = `Wechsel #${id} → ${newStatus}` + (res.email_sent ? ' (Email gesendet)' : '');
+    loadSwitches();
+  } catch (e) {
+    st.className = 'status-msg status-err';
+    st.textContent = e.message;
+  }
+  setTimeout(() => st.className = 'status-msg', 4000);
+}
+
+async function downloadVollmacht(id) {
+  try {
+    const res = await fetch(`${BASE}/switches/${id}/vollmacht`, { headers: getAuthHeaders() });
+    if (!res.ok) throw new Error('Download fehlgeschlagen');
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `vollmacht_${id}.pdf`; a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+function loadAll() { loadOverview(); loadActivity(); loadAllowlist(); loadWaitlist(); loadSwitches(); }
 </script>
 </body>
 </html>

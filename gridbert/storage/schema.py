@@ -159,3 +159,28 @@ dashboard_widgets = Table(
     Column("config", Text, default="{}"),  # JSON
     Column("created_at", DateTime, server_default=func.now()),
 )
+
+# --- Switching Requests -------------------------------------------------------
+
+switching_requests = Table(
+    "switching_requests",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", Integer, ForeignKey("users.id"), nullable=False),
+    Column("status", String, nullable=False, default="pending"),  # pending | in_progress | completed | cancelled
+    Column("target_lieferant", String, nullable=False),
+    Column("target_tarif", String, nullable=False),
+    Column("savings_eur", Float, default=0.0),
+    Column("iban", String, default=""),
+    Column("email", String, nullable=False),
+    Column("zaehlpunkt", String, default=""),
+    Column("plz", String, default=""),
+    Column("jahresverbrauch_kwh", Float, default=0.0),
+    Column("current_lieferant", String, default=""),
+    Column("user_name", String, default=""),
+    Column("user_address", String, default=""),
+    Column("vollmacht_file_id", Integer, ForeignKey("uploaded_files.id"), nullable=True),
+    Column("notes", Text, default=""),
+    Column("created_at", DateTime, server_default=func.now()),
+    Column("completed_at", DateTime, nullable=True),
+)

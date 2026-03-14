@@ -137,3 +137,62 @@ was nicht? Antworte einfach auf diese Mail oder schreib mir im Chat.</p>
 <p style="margin-top:24px;">Bis bald,<br>
 <span style="color:{_TERRACOTTA};font-weight:600;">Gridbert</span></p>""")
     return subject, body
+
+
+def switching_initiated(
+    name: str,
+    target_lieferant: str,
+    target_tarif: str,
+    savings_eur: float,
+) -> tuple[str, str]:
+    """Email when tariff switch request is created."""
+    greeting = f"Hallo {name}" if name else "Hallo"
+    savings_str = f"{savings_eur:.0f}" if savings_eur == int(savings_eur) else f"{savings_eur:.2f}"
+    subject = "Dein Tarifwechsel wurde eingeleitet ⚡"
+    body = _wrap(f"""\
+<p>{greeting},</p>
+<p>Dein Tarifwechsel ist in Bearbeitung!</p>
+<table style="width:100%;border-collapse:collapse;margin:16px 0;">
+  <tr><td style="padding:6px 0;color:{_WARM_GRAU};">Neuer Anbieter</td>
+      <td style="padding:6px 0;font-weight:600;">{target_lieferant}</td></tr>
+  <tr><td style="padding:6px 0;color:{_WARM_GRAU};">Tarif</td>
+      <td style="padding:6px 0;font-weight:600;">{target_tarif}</td></tr>
+  <tr><td style="padding:6px 0;color:{_WARM_GRAU};">Geschätzte Ersparnis</td>
+      <td style="padding:6px 0;font-weight:600;color:{_TERRACOTTA};">{savings_str} €/Jahr</td></tr>
+</table>
+<p>Ben kümmert sich in den nächsten Tagen um den Wechsel.
+Die Vollmacht findest du in deinem Gridbert-Dashboard unter „Dokumente".</p>
+<p style="font-size:0.9rem;color:{_WARM_GRAU};">
+Du kannst den Status jederzeit im Dashboard verfolgen.
+Bei Fragen antworte einfach auf diese Mail oder schreib im Chat.</p>
+<p style="margin-top:24px;">Wir melden uns,<br>
+<span style="color:{_TERRACOTTA};font-weight:600;">Gridbert</span></p>""")
+    return subject, body
+
+
+def switching_completed(
+    name: str,
+    target_lieferant: str,
+    target_tarif: str,
+    savings_eur: float,
+) -> tuple[str, str]:
+    """Email when tariff switch is completed."""
+    greeting = f"Hallo {name}" if name else "Hallo"
+    savings_str = f"{savings_eur:.0f}" if savings_eur == int(savings_eur) else f"{savings_eur:.2f}"
+    subject = "Tarifwechsel abgeschlossen! 🎉"
+    body = _wrap(f"""\
+<p>{greeting},</p>
+<p><strong>Dein Tarifwechsel ist abgeschlossen!</strong></p>
+<table style="width:100%;border-collapse:collapse;margin:16px 0;">
+  <tr><td style="padding:6px 0;color:{_WARM_GRAU};">Neuer Anbieter</td>
+      <td style="padding:6px 0;font-weight:600;">{target_lieferant}</td></tr>
+  <tr><td style="padding:6px 0;color:{_WARM_GRAU};">Tarif</td>
+      <td style="padding:6px 0;font-weight:600;">{target_tarif}</td></tr>
+  <tr><td style="padding:6px 0;color:{_WARM_GRAU};">Ersparnis</td>
+      <td style="padding:6px 0;font-weight:600;color:{_TERRACOTTA};">{savings_str} €/Jahr</td></tr>
+</table>
+<p>Der neue Lieferant übernimmt die Kündigung bei deinem alten Anbieter —
+du musst nichts weiter tun. Die Umstellung passiert nahtlos.</p>
+<p style="margin-top:24px;">Viel Freude mit dem neuen Tarif!<br>
+<span style="color:{_TERRACOTTA};font-weight:600;">Gridbert</span></p>""")
+    return subject, body

@@ -6,6 +6,7 @@ import { GridbertArea } from "./GridbertArea";
 import { TaskList } from "./TaskList";
 import { QuestionArea } from "./QuestionArea";
 import { DocumentTable } from "./DocumentTable";
+import { SwitchingStatusCard } from "./SwitchingStatusCard";
 
 interface Props {
   onOpenChat: () => void;
@@ -22,10 +23,12 @@ export function Dashboard({ onOpenChat }: Props) {
   const consumptionKpi = widgets.find((w) => w.widget_type === "consumption_kpi");
   const savingsWidget = widgets.find((w) => w.widget_type === "savings_summary");
   const chartWidget = widgets.find((w) => w.widget_type === "consumption_chart");
+  const switchingWidget = widgets.find((w) => w.widget_type === "switching_status");
 
   const hasKpis = Boolean(consumptionKpi || savingsWidget);
   const hasChart = Boolean(chartWidget);
   const hasDataRow = hasKpis || hasChart;
+  const hasSwitching = Boolean(switchingWidget);
 
   // Dynamic grid layout depending on available data
   const gridTemplateAreas = hasDataRow
@@ -35,12 +38,12 @@ export function Dashboard({ onOpenChat }: Props) {
       ${hasKpis && !hasChart ? '"kpi1  gridbert gridbert"' : ""}
       ${hasKpis && !hasChart ? '"kpi2  gridbert gridbert"' : ""}
       ${!hasKpis && hasChart ? '"chart chart    gridbert"' : ""}
-      "tasks question question"
+      ${hasSwitching ? '"switching tasks question"' : '"tasks question question"'}
       "table table    table"
     `
     : `
       "gridbert gridbert gridbert"
-      "tasks   question question"
+      ${hasSwitching ? '"switching tasks question"' : '"tasks   question question"'}
       "table   table    table"
     `;
 
@@ -94,6 +97,7 @@ export function Dashboard({ onOpenChat }: Props) {
       {hasChart && <ChartArea widget={chartWidget!} />}
 
       <GridbertArea onOpenChat={onOpenChat} />
+      {hasSwitching && <SwitchingStatusCard config={switchingWidget!.config} />}
       <TaskList onOpenChat={onOpenChat} />
       <QuestionArea onOpenChat={onOpenChat} />
       <DocumentTable />

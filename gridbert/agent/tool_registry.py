@@ -1,77 +1,24 @@
 # Gridbert — Persönlicher Energie-Agent
 # SPDX-License-Identifier: AGPL-3.0-only
 
-"""Tool Registry: Registriert Tools mit Claude API-kompatiblen Definitionen."""
+"""Tool Registry wiring — Gridbert-specific tool registration.
+
+The generic ToolRegistry class lives in gridbert.agent.registry (no business
+imports). This module re-exports it for backward compatibility and contains
+the build_default_registry() / build_core_registry() functions that wire
+Gridbert-specific tools, storage, and config.
+"""
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
 from typing import Any
 
-from gridbert.agent.types import ToolDefinition
+# Re-export for backward compatibility — all existing imports of
+# `from gridbert.agent.tool_registry import ToolRegistry` keep working.
+from gridbert.agent.registry import ToolRegistry  # noqa: F401
 
 log = logging.getLogger(__name__)
-
-
-class ToolRegistry:
-    """Registry für Agent-Tools.
-
-    Mappt Tool-Namen auf Python-Funktionen und generiert
-    Claude API tool definitions.
-    """
-
-    def __init__(self) -> None:
-        self._definitions: dict[str, ToolDefinition] = {}
-        self._handlers: dict[str, Callable[..., Any]] = {}
-
-    def register(
-        self,
-        name: str,
-        description: str,
-        input_schema: dict[str, Any],
-        handler: Callable[..., Any],
-    ) -> None:
-        """Registriere ein Tool mit Claude API Definition und Handler."""
-        self._definitions[name] = ToolDefinition(
-            name=name,
-            description=description,
-            input_schema=input_schema,
-        )
-        self._handlers[name] = handler
-        log.debug("Tool registriert: %s", name)
-
-    def definitions(self) -> list[dict[str, Any]]:
-        """Claude API tool definitions zurückgeben."""
-        return [
-            {
-                "name": defn.name,
-                "description": defn.description,
-                "input_schema": defn.input_schema,
-            }
-            for defn in self._definitions.values()
-        ]
-
-    def execute(self, name: str, input_data: dict[str, Any]) -> str:
-        """Tool ausführen und Ergebnis als String zurückgeben."""
-        handler = self._handlers.get(name)
-        if handler is None:
-            return f"Unbekanntes Tool: {name}"
-
-        log.info("Tool ausführen: %s", name)
-        try:
-            result = handler(**input_data)
-            # Pydantic-Models automatisch serialisieren
-            if hasattr(result, "model_dump_json"):
-                return result.model_dump_json(indent=2)
-            return str(result)
-        except Exception as e:
-            log.exception("Tool %s fehlgeschlagen: %s", name, e)
-            return f"Fehler bei {name}: Das Tool konnte nicht ausgeführt werden."
-
-    @property
-    def tool_names(self) -> list[str]:
-        return list(self._definitions.keys())
 
 
 def build_default_registry(
@@ -666,7 +613,8 @@ def build_default_registry(
                                 pages_text.append(text)
                     return "\n\n".join(pages_text) if pages_text else "[PDF enthält keinen extrahierbaren Text.]"
                 except Exception as exc:
-                    return f"[FEHLER: PDF konnte nicht gelesen werden: {exc}]"
+                    log.error("PDF reading failed for file %s: %s", file_id, exc)
+                    return "[FEHLER: PDF konnte nicht gelesen werden.]"
 
             # Images → can't return content as text
             if media_type.startswith("image/"):
@@ -754,7 +702,7 @@ def build_default_registry(
                 "grundgebuehr, jahresverbrauch, plz, zaehlpunkt, rechnungsbetrag, zeitraum), "
                 "savings_summary, tariff_comparison, consumption_chart, "
                 "consumption_kpi, spot_price, battery_sim, pv_sim, "
-                "gas_comparison, beg_comparison."
+                "gas_comparison, beg_comparison, switching_status."
             ),
             input_schema={
                 "type": "object",
@@ -765,7 +713,7 @@ def build_default_registry(
                             "Art des Widgets: invoice_summary, savings_summary, "
                             "tariff_comparison, consumption_chart, consumption_kpi, "
                             "spot_price, battery_sim, pv_sim, gas_comparison, "
-                            "beg_comparison"
+                            "beg_comparison, switching_status"
                         ),
                     },
                     "config": {
@@ -781,6 +729,194 @@ def build_default_registry(
                 "required": ["widget_type", "config"],
             },
             handler=_add_dashboard_widget,
+        )
+
+        # --- Tariff Switch Request ---------------------------------------------------
+        def _request_tariff_switch(
+            target_lieferant: str,
+            target_tarif: str,
+            savings_eur: float,
+            iban: str,
+            zaehlpunkt: str = "",
+            plz: str = "",
+            jahresverbrauch_kwh: float = 0.0,
+            current_lieferant: str = "",
+            current_tarif: str = "",
+            user_name: str = "",
+            user_address: str = "",
+        ) -> str:
+            """Initiate a tariff switch request on behalf of the user."""
+            import base64
+            import re
+
+            from gridbert.email import send_email
+            from gridbert.email.templates import switching_initiated
+            from gridbert.storage.repositories.file_repo import save_file
+            from gridbert.storage.repositories.switching_repo import (
+                create_switching_request,
+            )
+            from gridbert.storage.repositories.user_repo import get_user_by_id
+            from gridbert.tools.switching import generate_switching_pdf
+
+            # Validate IBAN format (AT/DE)
+            iban_clean = iban.replace(" ", "").upper()
+            if not re.match(r"^(AT\d{18}|DE\d{20})$", iban_clean):
+                return "Fehler: Ungültiges IBAN-Format. Bitte eine gültige AT oder DE IBAN angeben."
+
+            # Get user email
+            user = get_user_by_id(db_conn, user_id)
+            if not user:
+                return "Fehler: User nicht gefunden."
+            user_email = user["email"]
+
+            # Generate Vollmacht PDF
+            try:
+                pdf_path = generate_switching_pdf(
+                    user_name=user_name,
+                    user_address=user_address,
+                    plz=plz,
+                    zaehlpunkt=zaehlpunkt,
+                    iban=iban_clean,
+                    email=user_email,
+                    current_lieferant=current_lieferant,
+                    current_tarif=current_tarif,
+                    target_lieferant=target_lieferant,
+                    target_tarif=target_tarif,
+                    target_energiepreis=0.0,
+                    target_grundgebuehr=0.0,
+                    target_jahreskosten=0.0,
+                    target_ist_oekostrom=False,
+                    jahresverbrauch_kwh=jahresverbrauch_kwh,
+                )
+            except Exception as exc:
+                log.error("PDF generation failed: %s", exc)
+                return "Fehler bei der PDF-Erstellung. Bitte versuche es erneut."
+
+            # Save PDF to uploaded_files
+            with open(pdf_path, "rb") as f:
+                pdf_b64 = base64.b64encode(f.read()).decode()
+            file_meta = save_file(
+                db_conn, user_id,
+                file_name="gridbert_vollmacht.pdf",
+                media_type="application/pdf",
+                data_b64=pdf_b64,
+            )
+            vollmacht_file_id = file_meta["id"]
+
+            # Create switching request record
+            request_id = create_switching_request(
+                db_conn,
+                user_id=user_id,
+                target_lieferant=target_lieferant,
+                target_tarif=target_tarif,
+                savings_eur=savings_eur,
+                iban=iban_clean,
+                email=user_email,
+                zaehlpunkt=zaehlpunkt,
+                plz=plz,
+                jahresverbrauch_kwh=jahresverbrauch_kwh,
+                current_lieferant=current_lieferant,
+                user_name=user_name,
+                user_address=user_address,
+                vollmacht_file_id=vollmacht_file_id,
+            )
+
+            # Create switching_status dashboard widget
+            _add_dashboard_widget(
+                widget_type="switching_status",
+                config={
+                    "request_id": request_id,
+                    "status": "pending",
+                    "target_lieferant": target_lieferant,
+                    "target_tarif": target_tarif,
+                    "savings_eur": savings_eur,
+                },
+            )
+
+            # Send confirmation email (non-blocking)
+            subject, html = switching_initiated(
+                name=user_name or user.get("name", ""),
+                target_lieferant=target_lieferant,
+                target_tarif=target_tarif,
+                savings_eur=savings_eur,
+            )
+            send_email(user_email, subject, html)
+
+            return _json.dumps({
+                "status": "ok",
+                "request_id": request_id,
+                "vollmacht_file_id": vollmacht_file_id,
+                "message": (
+                    f"Tarifwechsel-Antrag #{request_id} erstellt. "
+                    f"Vollmacht als PDF gespeichert. "
+                    f"Ben kümmert sich in den nächsten Tagen um den Wechsel zu {target_lieferant} ({target_tarif})."
+                ),
+            }, ensure_ascii=False)
+
+        registry.register(
+            name="request_tariff_switch",
+            description=(
+                "Tarifwechsel für den User einleiten. Erstellt eine Vollmacht (PDF), "
+                "speichert den Wechselantrag und benachrichtigt Ben. "
+                "Voraussetzung: Du hast alle nötigen Daten gesammelt — Name, Adresse, "
+                "IBAN, Ziellieferant, Zieltarif, Ersparnis. "
+                "WICHTIG: Rufe dieses Tool NUR auf wenn der User den Wechsel explizit bestätigt hat "
+                "und alle Daten vollständig sind."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "target_lieferant": {
+                        "type": "string",
+                        "description": "Name des neuen Stromlieferanten",
+                    },
+                    "target_tarif": {
+                        "type": "string",
+                        "description": "Name des Zieltarifs",
+                    },
+                    "savings_eur": {
+                        "type": "number",
+                        "description": "Geschätzte jährliche Ersparnis in EUR",
+                    },
+                    "iban": {
+                        "type": "string",
+                        "description": "IBAN des Users (AT oder DE Format)",
+                    },
+                    "zaehlpunkt": {
+                        "type": "string",
+                        "description": "Zählpunktnummer (AT0000...)",
+                    },
+                    "plz": {
+                        "type": "string",
+                        "description": "Postleitzahl des Users",
+                    },
+                    "jahresverbrauch_kwh": {
+                        "type": "number",
+                        "description": "Jahresverbrauch in kWh",
+                    },
+                    "current_lieferant": {
+                        "type": "string",
+                        "description": "Aktueller Stromlieferant",
+                    },
+                    "current_tarif": {
+                        "type": "string",
+                        "description": "Aktueller Tarifname",
+                    },
+                    "user_name": {
+                        "type": "string",
+                        "description": "Vollständiger Name des Users",
+                    },
+                    "user_address": {
+                        "type": "string",
+                        "description": "Adresse des Users (Straße, Hausnummer, PLZ Ort)",
+                    },
+                },
+                "required": [
+                    "target_lieferant", "target_tarif", "savings_eur",
+                    "iban", "user_name", "user_address",
+                ],
+            },
+            handler=_request_tariff_switch,
         )
 
         registry.register(
@@ -829,12 +965,11 @@ def build_core_registry(
         "update_user_memory",
         "get_user_file",
         "add_dashboard_widget",
+        "request_tariff_switch",
     }
 
     registry = ToolRegistry()
     for name in core_tools:
-        if name in full._definitions and name in full._handlers:
-            registry._definitions[name] = full._definitions[name]
-            registry._handlers[name] = full._handlers[name]
+        registry.copy_tool(name, full)
 
     return registry

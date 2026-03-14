@@ -23,6 +23,7 @@ from gridbert.storage.schema import (
     conversations,
     dashboard_widgets,
     messages,
+    switching_requests,
     uploaded_files,
     user_memory,
     users,
@@ -204,6 +205,10 @@ def admin_overview(
         .limit(50)
     ).mappings().all()
 
+    # Switching stats
+    from gridbert.storage.repositories.switching_repo import get_switching_stats
+    switching_stats = get_switching_stats(conn)
+
     return {
         "total_users": user_count,
         "total_waitlist": waitlist_count,
@@ -218,6 +223,7 @@ def admin_overview(
         "llm_user_cost_usd": round(user_cost_usd, 4),
         "llm_input_tokens": total_input_tokens,
         "llm_output_tokens": total_output_tokens,
+        "switching": switching_stats,
         "users": [
             {
                 "id": u["id"],
@@ -362,6 +368,7 @@ def admin_delete_user(
     if conv_ids:
         conn.execute(messages.delete().where(messages.c.conversation_id.in_(conv_ids)))
     conn.execute(analyses.delete().where(analyses.c.user_id == user_id))
+    conn.execute(switching_requests.delete().where(switching_requests.c.user_id == user_id))
     conn.execute(dashboard_widgets.delete().where(dashboard_widgets.c.user_id == user_id))
     conn.execute(user_memory.delete().where(user_memory.c.user_id == user_id))
     conn.execute(uploaded_files.delete().where(uploaded_files.c.user_id == user_id))
@@ -405,6 +412,7 @@ def admin_remove_from_allowlist(
         if conv_ids:
             conn.execute(messages.delete().where(messages.c.conversation_id.in_(conv_ids)))
         conn.execute(analyses.delete().where(analyses.c.user_id == user_id))
+        conn.execute(switching_requests.delete().where(switching_requests.c.user_id == user_id))
         conn.execute(dashboard_widgets.delete().where(dashboard_widgets.c.user_id == user_id))
         conn.execute(user_memory.delete().where(user_memory.c.user_id == user_id))
         conn.execute(uploaded_files.delete().where(uploaded_files.c.user_id == user_id))
@@ -734,7 +742,8 @@ def admin_summary(
                 "Fasse die Aktivitaet seit dem letzten Admin-Login zusammen. "
                 "Sei knapp (3-5 Saetze). Hebe Anomalien oder bemerkenswerte Dinge hervor "
                 "(z.B. ungewoehnlich aktive User, hohe Kosten, keine Aktivitaet). "
-                "Antworte auf Deutsch. Verwende keine Emojis."
+                "Antworte auf Deutsch. Verwende keine Emojis. "
+                "Beginne NICHT mit einer Ueberschrift oder einem Titel — schreibe direkt den Fliesstext."
             ),
             messages=[{"role": "user", "content": prompt_data}],
         )
@@ -744,3 +753,176 @@ def admin_summary(
         summary_text = None
 
     return {"summary": summary_text, "raw": raw_stats}
+
+
+# --- Switching Queue ----------------------------------------------------------
+
+class SwitchStatusUpdateRequest(BaseModel):
+    status: str  # pending | in_progress | completed | cancelled
+    notes: str = ""
+
+
+@router.get("/switches")
+def admin_list_switches(
+    conn: DbConn,
+    authorization: str | None = Header(None),
+    status_filter: str | None = Query(None, alias="status"),
+) -> dict[str, Any]:
+    """List all switching requests with stats."""
+    _verify_admin(conn, authorization)
+    from gridbert.storage.repositories.switching_repo import (
+        get_switching_stats,
+        list_all_requests,
+    )
+
+    requests = list_all_requests(conn, status_filter=status_filter)
+    stats = get_switching_stats(conn)
+
+    return {
+        "stats": stats,
+        "requests": [
+            {
+                "id": r["id"],
+                "user_id": r["user_id"],
+                "user_email": r.get("user_email", ""),
+                "user_display_name": r.get("user_display_name", ""),
+                "user_name": r["user_name"],
+                "user_address": r["user_address"],
+                "status": r["status"],
+                "current_lieferant": r["current_lieferant"],
+                "target_lieferant": r["target_lieferant"],
+                "target_tarif": r["target_tarif"],
+                "savings_eur": r["savings_eur"],
+                "iban": r["iban"],
+                "email": r["email"],
+                "zaehlpunkt": r["zaehlpunkt"],
+                "plz": r["plz"],
+                "jahresverbrauch_kwh": r["jahresverbrauch_kwh"],
+                "vollmacht_file_id": r["vollmacht_file_id"],
+                "notes": r["notes"],
+                "created_at": str(r["created_at"]) if r["created_at"] else None,
+                "completed_at": str(r["completed_at"]) if r["completed_at"] else None,
+            }
+            for r in requests
+        ],
+    }
+
+
+@router.post("/switches/{request_id}/status")
+def admin_update_switch_status(
+    request_id: int,
+    req: SwitchStatusUpdateRequest,
+    conn: DbConn,
+    authorization: str | None = Header(None),
+) -> dict[str, Any]:
+    """Update switching request status. Sends email on completion."""
+    _verify_admin(conn, authorization)
+    from gridbert.storage.repositories.switching_repo import (
+        get_switching_request,
+        update_request_status,
+    )
+
+    valid_statuses = {"pending", "in_progress", "completed", "cancelled"}
+    if req.status not in valid_statuses:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Ungültiger Status. Erlaubt: {', '.join(sorted(valid_statuses))}",
+        )
+
+    sr = get_switching_request(conn, request_id)
+    if not sr:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Wechselantrag nicht gefunden",
+        )
+
+    updated = update_request_status(conn, request_id, req.status, req.notes)
+    if not updated:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Update fehlgeschlagen")
+
+    # Send email on completion
+    email_sent = False
+    if req.status == "completed":
+        from gridbert.email import send_email
+        from gridbert.email.templates import switching_completed
+
+        user = conn.execute(
+            select(users.c.name, users.c.email).where(users.c.id == sr["user_id"])
+        ).mappings().first()
+        if user:
+            subj, html = switching_completed(
+                name=sr["user_name"] or user["name"] or "",
+                target_lieferant=sr["target_lieferant"],
+                target_tarif=sr["target_tarif"],
+                savings_eur=sr["savings_eur"],
+            )
+            email_sent = send_email(user["email"], subj, html)
+
+            # Update dashboard widget
+            existing_widget = conn.execute(
+                dashboard_widgets.select().where(
+                    dashboard_widgets.c.user_id == sr["user_id"],
+                    dashboard_widgets.c.widget_type == "switching_status",
+                )
+            ).first()
+            if existing_widget:
+                import json as _json
+                cfg = (
+                    _json.loads(existing_widget.config)
+                    if isinstance(existing_widget.config, str)
+                    else existing_widget.config or {}
+                )
+                cfg["status"] = "completed"
+                conn.execute(
+                    dashboard_widgets.update()
+                    .where(dashboard_widgets.c.id == existing_widget.id)
+                    .values(config=_json.dumps(cfg))
+                )
+                conn.commit()
+
+    return {
+        "request_id": request_id,
+        "status": req.status,
+        "email_sent": email_sent,
+    }
+
+
+@router.get("/switches/{request_id}/vollmacht")
+def admin_download_vollmacht(
+    request_id: int,
+    conn: DbConn,
+    authorization: str | None = Header(None),
+) -> Any:
+    """Download the Vollmacht PDF for a switching request."""
+    _verify_admin(conn, authorization)
+    from fastapi.responses import FileResponse
+
+    from gridbert.storage.repositories.switching_repo import get_switching_request
+
+    sr = get_switching_request(conn, request_id)
+    if not sr or not sr.get("vollmacht_file_id"):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Vollmacht nicht gefunden",
+        )
+
+    file_row = conn.execute(
+        select(uploaded_files.c.disk_path, uploaded_files.c.file_name)
+        .where(uploaded_files.c.id == sr["vollmacht_file_id"])
+    ).mappings().first()
+    if not file_row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Datei nicht gefunden")
+
+    from gridbert.config import UPLOAD_DIR
+    full_path = Path(UPLOAD_DIR) / file_row["disk_path"]
+    if not full_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Datei auf Disk nicht gefunden",
+        )
+
+    return FileResponse(
+        path=str(full_path),
+        media_type="application/pdf",
+        filename=f"vollmacht_{request_id}.pdf",
+    )

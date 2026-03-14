@@ -165,8 +165,24 @@ def create_app() -> Flask:
 
         invoice = Invoice(**inv_data)
         best = Tariff(**alts[0])
-        pdf_path = generate_switching_pdf(invoice, best, profile)
-        return send_file(str(pdf_path), as_attachment=True, download_name="tarifwechsel_vollmacht.pdf")
+        pdf_path = generate_switching_pdf(
+            user_name=profile.get("name", ""),
+            user_address=profile.get("adresse", ""),
+            plz=invoice.plz,
+            zaehlpunkt=invoice.zaehlpunkt or "",
+            current_lieferant=invoice.lieferant,
+            current_tarif=invoice.tarif_name or "",
+            current_energiepreis=invoice.energiepreis_ct_kwh,
+            current_grundgebuehr=invoice.grundgebuehr_eur_monat,
+            target_lieferant=best.lieferant,
+            target_tarif=best.tarif_name,
+            target_energiepreis=best.energiepreis_ct_kwh,
+            target_grundgebuehr=best.grundgebuehr_eur_monat,
+            target_jahreskosten=best.jahreskosten_eur,
+            target_ist_oekostrom=best.ist_oekostrom,
+            jahresverbrauch_kwh=invoice.jahresverbrauch_kwh,
+        )
+        return send_file(str(pdf_path), as_attachment=True, download_name="gridbert_vollmacht.pdf")
 
     @app.route("/download/beg/<int:analysis_id>")
     def download_beg(analysis_id: int):  # type: ignore[no-untyped-def]
