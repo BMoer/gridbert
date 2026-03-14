@@ -7,20 +7,24 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Callable
 from typing import Any
 
-from gridbert.agent.tool_registry import ToolRegistry
+from gridbert.agent.registry import ToolRegistry
 from gridbert.agent.types import AgentEvent, EventCallback, EventType
-from gridbert.config import CLAUDE_MAX_TOKENS
 from gridbert.llm import LLMProvider
 from gridbert.llm.types import LLMTextBlock, LLMToolUseBlock
 
 log = logging.getLogger(__name__)
 
 MAX_TURNS = 20
+_DEFAULT_MAX_TOKENS = 4096
 
 # Pattern für Vorschläge am Ende einer Antwort
 _SUGGESTION_RE = re.compile(r"^>> (.+)$", re.MULTILINE)
+
+# Type alias for system prompt builder callable
+SystemPromptBuilder = Callable[[], str]
 
 
 class GridbertAgent:
@@ -28,32 +32,48 @@ class GridbertAgent:
 
     The LLM decides which tools to call. Text is streamed to the frontend.
     Works with any LLM provider that implements the LLMProvider protocol.
+
+    The system_prompt_builder and max_tokens parameters decouple the agent
+    loop from application-specific configuration, making it reusable as a
+    standalone library component.
     """
 
     def __init__(
         self,
         tool_registry: ToolRegistry,
         llm_provider: LLMProvider,
+        *,
+        system_prompt_builder: SystemPromptBuilder | None = None,
+        max_tokens: int = _DEFAULT_MAX_TOKENS,
         user_memory: list[dict[str, str]] | None = None,
         user_files: list[dict] | None = None,
     ) -> None:
         self._llm = llm_provider
         self._tools = tool_registry
+        self._system_prompt_builder = (
+            system_prompt_builder or self._default_system_prompt
+        )
+        self._max_tokens = max_tokens
         self._user_memory = user_memory or []
         self._user_files = user_files or []
         # Usage tracking — populated after run()
         self.total_input_tokens: int = 0
         self.total_output_tokens: int = 0
 
+    @staticmethod
+    def _default_system_prompt() -> str:
+        """Minimal fallback when no builder is provided."""
+        return "Du bist ein hilfreicher Energieberater."
+
     def _build_system_prompt(self) -> str:
         """System-Prompt mit User-Memory-Kontext aufbauen."""
         from datetime import date
 
-        from gridbert.prompts import SYSTEM_PROMPT_V1
+        base = self._system_prompt_builder()
 
         today = date.today().strftime("%d.%m.%Y")
         parts = [
-            SYSTEM_PROMPT_V1,
+            base,
             f"## Aktuelles Datum\nHeute ist der {today}. "
             "Verwende dieses Datum als Referenz für zeitliche Einordnungen "
             "(z.B. ob ein Tarifstart in der Vergangenheit oder Zukunft liegt).",
@@ -130,7 +150,7 @@ class GridbertAgent:
                 system=system_prompt,
                 messages=messages,
                 tools=tool_definitions,
-                max_tokens=CLAUDE_MAX_TOKENS,
+                max_tokens=self._max_tokens,
             )
 
             # Accumulate token usage

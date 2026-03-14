@@ -11,15 +11,16 @@ import queue
 import threading
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, UploadFile, status
+from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import select
 
 from gridbert.agent.loop import GridbertAgent
 from gridbert.agent.tool_registry import build_core_registry
 from gridbert.agent.types import AgentEvent, EventType
 from gridbert.api.deps import CurrentUserId, DbConn
-from gridbert.config import ANTHROPIC_API_KEY, CLAUDE_MODEL
+from gridbert.config import ANTHROPIC_API_KEY, CLAUDE_MAX_TOKENS, CLAUDE_MODEL
 from gridbert.llm import create_provider
 from gridbert.storage.repositories.chat_repo import (
     add_message,
@@ -166,9 +167,16 @@ def chat(
 
     # Agent bauen — mit User-Kontext für Memory-Tool und Datei-Zugriff
     registry = build_core_registry(user_id=user_id, db_conn=conn, llm_provider=llm_provider)
+
+    def _build_system_prompt() -> str:
+        from gridbert.prompts import SYSTEM_PROMPT_V1
+        return SYSTEM_PROMPT_V1
+
     agent = GridbertAgent(
         tool_registry=registry,
         llm_provider=llm_provider,
+        system_prompt_builder=_build_system_prompt,
+        max_tokens=CLAUDE_MAX_TOKENS,
         user_memory=memories,
         user_files=user_files,
     )

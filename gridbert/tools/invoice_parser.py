@@ -14,7 +14,6 @@ from typing import Any
 
 import pdfplumber
 
-from gridbert.config import ANTHROPIC_API_KEY
 from gridbert.models import Invoice
 
 log = logging.getLogger(__name__)
@@ -117,7 +116,7 @@ def _extract_via_llm(
     """Extrahiere Rechnungsdaten via LLM Provider (Claude Vision, OpenAI, etc.)."""
     if llm_provider is None:
         # Fallback: create Claude provider from server config
-        from gridbert.config import CLAUDE_MODEL
+        from gridbert.config import ANTHROPIC_API_KEY, CLAUDE_MODEL
         from gridbert.llm import create_provider
 
         llm_provider = create_provider("claude", ANTHROPIC_API_KEY, CLAUDE_MODEL)
@@ -193,7 +192,9 @@ def parse_invoice(file_path: str | Path, llm_provider: Any = None) -> Invoice:
         raise FileNotFoundError(f"Datei nicht gefunden: {path}")
 
     # Determine extraction backend
-    if llm_provider is not None or ANTHROPIC_API_KEY:
+    from gridbert.config import ANTHROPIC_API_KEY as _server_key
+
+    if llm_provider is not None or _server_key:
         def extract_fn(text: str = "", image_b64: str = "") -> dict:
             return _extract_via_llm(llm_provider=llm_provider, text=text, image_b64=image_b64)
         backend_name = llm_provider.provider_name if llm_provider else "Claude"

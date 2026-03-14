@@ -16,6 +16,14 @@ from sqlalchemy.pool import StaticPool
 from gridbert.storage.schema import metadata
 
 
+@pytest.fixture(autouse=True)
+def _clear_rate_limiter():
+    """Reset in-memory rate limiter between tests."""
+    from gridbert.api.rate_limit import _requests
+
+    _requests.clear()
+
+
 @pytest.fixture()
 def db_engine():
     """In-memory SQLite engine with shared connection pool.

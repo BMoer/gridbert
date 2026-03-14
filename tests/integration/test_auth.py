@@ -21,11 +21,11 @@ class TestRegister:
     def test_register_duplicate_email(self, client):
         client.post("/api/auth/register", json={
             "email": "dup@user.com",
-            "password": "pass1",
+            "password": "securepass1",
         })
         res = client.post("/api/auth/register", json={
             "email": "dup@user.com",
-            "password": "pass2",
+            "password": "securepass2",
         })
         assert res.status_code == 409
 
@@ -38,7 +38,7 @@ class TestRegister:
 
 
 class TestLogin:
-    def _register(self, client, email="login@test.com", password="pass123"):
+    def _register(self, client, email="login@test.com", password="securepass123"):
         client.post("/api/auth/register", json={
             "email": email,
             "password": password,
@@ -49,7 +49,7 @@ class TestLogin:
         self._register(client)
         res = client.post("/api/auth/login", json={
             "email": "login@test.com",
-            "password": "pass123",
+            "password": "securepass123",
         })
         assert res.status_code == 200
         data = res.json()
@@ -59,14 +59,14 @@ class TestLogin:
         self._register(client)
         res = client.post("/api/auth/login", json={
             "email": "login@test.com",
-            "password": "wrongpass",
+            "password": "wrongpass1",
         })
         assert res.status_code == 401
 
     def test_login_nonexistent_user(self, client):
         res = client.post("/api/auth/login", json={
             "email": "noone@test.com",
-            "password": "pass",
+            "password": "somepassword",
         })
         assert res.status_code == 401
 
@@ -76,7 +76,7 @@ class TestProfile:
         # Register and get token
         res = client.post("/api/auth/register", json={
             "email": "profile@test.com",
-            "password": "pass123",
+            "password": "securepass123",
             "name": "Profiler",
         })
         token = res.json()["access_token"]

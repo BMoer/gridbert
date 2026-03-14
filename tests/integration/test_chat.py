@@ -13,7 +13,7 @@ class TestChatEndpoint:
     def _register_and_get_token(self, client) -> str:
         res = client.post("/api/auth/register", json={
             "email": "chat@test.com",
-            "password": "pass123",
+            "password": "securepass123",
         })
         return res.json()["access_token"]
 
@@ -22,7 +22,7 @@ class TestChatEndpoint:
         assert res.status_code == 401
 
     @patch("gridbert.api.routes.chat.GridbertAgent")
-    @patch("gridbert.api.routes.chat.build_default_registry")
+    @patch("gridbert.api.routes.chat.build_core_registry")
     @patch("gridbert.api.routes.chat.ANTHROPIC_API_KEY", "sk-test")
     def test_chat_streams_events(self, mock_registry, mock_agent_class, client):
         token = self._register_and_get_token(client)
@@ -111,7 +111,7 @@ class TestConversations:
         """Register, then simulate a conversation by directly inserting data."""
         res = client.post("/api/auth/register", json={
             "email": "conv@test.com",
-            "password": "pass123",
+            "password": "securepass123",
         })
         return res.json()["access_token"]
 

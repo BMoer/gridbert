@@ -42,7 +42,7 @@ cd frontend && npm run build
 
 **`agent/loop.py:GridbertAgent.run()`** is the core. Provider-agnostic agent loop with native tool calling. The LLM decides which tools to call, feeds results back, loops until done. No hardcoded pipeline.
 
-**`agent/tool_registry.py`** maps Python functions → tool definitions (JSON Schema). `build_default_registry()` registers all tools. To add a new tool: register it in the registry with name, description, input_schema, and handler function.
+**`agent/registry.py`** contains the generic `ToolRegistry` class (no business imports). **`agent/tool_registry.py`** contains `build_default_registry()` / `build_core_registry()` which wire Gridbert-specific tools. To add a new tool: register it in the registry with name, description, input_schema, and handler function.
 
 **`agent/loop.py`** also emits `WIDGET_ADD`/`WIDGET_UPDATE` SSE events when the `add_dashboard_widget` tool is called, so the frontend dashboard updates live during conversation.
 
@@ -186,6 +186,65 @@ frontend/src/
 7. Events stream to frontend via SSE → chatStore + dashboardStore update reactively
 8. Messages and memory persisted to DB
 
+### Core / Application Boundary
+
+The codebase is split into **core modules** (reusable, no business dependencies) and **application modules** (Gridbert-specific SaaS logic). This boundary is enforced by CI and prepares for a future open-source extraction.
+
+**Core modules** (zero imports from `config`, `storage`, `api`, `prompts`, `email`, `crypto`):
+
+```
+agent/registry.py      # ToolRegistry class — generic tool registration
+agent/loop.py          # GridbertAgent — provider-agnostic agent loop
+agent/types.py         # AgentEvent, ToolDefinition, EventType
+llm/                   # LLMProvider protocol + Claude/OpenAI implementations
+models/                # All Pydantic energy data models
+tools/                 # Energy analysis tools (tariff, smart meter, load profile, etc.)
+```
+
+**Application modules** (Gridbert SaaS — imports freely from core and business modules):
+
+```
+agent/tool_registry.py # build_default_registry() / build_core_registry() — wiring
+api/                   # FastAPI routes, auth, rate limiting
+storage/               # Database schema, repositories
+prompts/               # System prompt, journey, personality
+email/                 # Notification templates
+config.py              # Environment configuration
+crypto.py              # Fernet encryption for API keys
+frontend/              # React SPA
+```
+
+**Key design decisions:**
+- `GridbertAgent.__init__()` accepts `system_prompt_builder` (callable) and `max_tokens` (int) — no hardcoded config imports
+- `ToolRegistry` class in `agent/registry.py` has zero business imports; `tool_registry.py` re-exports it and adds the wiring functions
+- Tools use **lazy imports** (inside functions) for `gridbert.config` when a fallback is needed — this keeps the module importable without config
+- The boundary is enforced by `scripts/check_core_boundary.py` (run in CI):
+
+```bash
+# Check that core modules don't import business logic at module level
+python scripts/check_core_boundary.py
+```
+
+**Using the core standalone** (without the Gridbert app):
+
+```python
+from gridbert.agent.registry import ToolRegistry
+from gridbert.agent.loop import GridbertAgent
+from gridbert.llm import create_provider
+from gridbert.tools.tariff_compare import compare_tariffs
+
+registry = ToolRegistry()
+registry.register("compare_tariffs", "Tarife vergleichen", {...}, compare_tariffs)
+
+provider = create_provider("claude", api_key="sk-...", model="claude-haiku-4-5-20251001")
+agent = GridbertAgent(
+    registry, provider,
+    system_prompt_builder=lambda: "Du bist ein Energieberater.",
+    max_tokens=4096,
+)
+result = agent.run("Vergleiche Tarife für PLZ 1060, 3200 kWh")
+```
+
 ## Key Rules
 
 - **All prices are BRUTTO** (incl. 20% Austrian VAT). E-Control API returns netto → multiply by 1.2.
@@ -198,6 +257,24 @@ frontend/src/
   # Gridbert — Persönlicher Energie-Agent
   # SPDX-License-Identifier: AGPL-3.0-only
   ```
+
+## E-Control API
+
+The tariff comparison (`tools/tariff_compare.py`) currently uses a **reverse-engineered internal API** (`/o/rc-public-rest/`). No auth, no official access. ~30% error rate mitigated by retry with backoff.
+
+Official API access (Basic Auth, free, requires business entity) is pending — email to tarifkalkulator@e-control.at needed. When available: compliance requires E-Control logo, source citation, no data modification, max 2500 req/hour.
+
+## Product Strategy
+
+**Two decoupled flows:**
+1. **Tarifwechsel** (Sprint 1) — bill upload → E-Control comparison → Vollmacht → manual switch. Does NOT need Smart Meter.
+2. **Verbrauchsanalyse** (Sprint 2) — after successful switch, optional Smart Meter credentials for daily monitoring. Retention feature.
+
+MVP = Stufe 2: Ben manually fills provider switch forms with Vollmacht (5-10 min/switch, first 10 pilots free).
+
+## Gridbert's Personality
+
+Slightly annoying energy nerd. Enthusiastic about numbers, direct about savings, persistent about follow-ups. "Du zahlst 373€ zu viel. Pro Jahr. Jedes Jahr." Not arrogant — genuinely excited about energy data.
 
 ## Scope
 
