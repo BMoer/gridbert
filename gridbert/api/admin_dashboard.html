@@ -182,12 +182,20 @@
     <p style="font-size:0.8rem;color:var(--warm-grau);margin-bottom:8px;" id="update-recipients">Empfaenger: --</p>
     <button class="btn btn-add" onclick="sendUpdate()" id="btn-send">An alle senden</button>
     <h3 style="font-size:0.95rem;margin:16px 0 8px;">LinkedIn Post</h3>
+    <p style="font-size:0.75rem;color:var(--warm-grau);margin-bottom:4px;">Wird beim Senden mitgespeichert.</p>
     <textarea id="update-linkedin" rows="8"
               style="width:100%;padding:10px;border:1px solid var(--warm-grau);border-radius:6px;font-family:inherit;font-size:0.9rem;resize:vertical;"></textarea>
     <button class="btn" style="background:var(--ink);color:var(--kreide);margin-top:8px;"
             onclick="navigator.clipboard.writeText(document.getElementById('update-linkedin').value);this.textContent='Kopiert!';setTimeout(()=>this.textContent='LinkedIn-Post kopieren',2000)">
       LinkedIn-Post kopieren
     </button>
+  </div>
+  <!-- Sent History -->
+  <div id="update-history" style="margin-top:20px;display:none;">
+    <h3 style="font-size:0.95rem;margin-bottom:8px;">Gesendete Updates</h3>
+    <div class="table-scroll">
+    <table><thead><tr><th>Datum</th><th>Betreff</th><th>Gesendet</th><th></th></tr></thead><tbody id="update-history-body"></tbody></table>
+    </div>
   </div>
 </div>
 
@@ -795,12 +803,14 @@ async function sendUpdate() {
       body: JSON.stringify({
         subject: document.getElementById('update-subject').value,
         body_html: document.getElementById('update-mail-body').innerHTML,
+        linkedin_post: document.getElementById('update-linkedin').value,
       }),
     });
     btn.textContent = `Gesendet! (${data.sent} Mails)`;
     if (data.failed > 0) {
       btn.textContent += ` — ${data.failed} fehlgeschlagen`;
     }
+    loadUpdateHistory();
     setTimeout(() => { btn.textContent = 'An alle senden'; btn.disabled = false; }, 5000);
   } catch (e) {
     alert('Fehler: ' + e.message);
@@ -809,7 +819,38 @@ async function sendUpdate() {
   }
 }
 
-function loadAll() { loadOverview(); loadActivity(); loadAllowlist(); loadWaitlist(); loadSwitches(); }
+// --- Weekly Update History ---
+async function loadUpdateHistory() {
+  try {
+    const rows = await api('/weekly-update/history?limit=5');
+    const container = document.getElementById('update-history');
+    const tbody = document.getElementById('update-history-body');
+    if (rows.length === 0) { container.style.display = 'none'; return; }
+    container.style.display = 'block';
+    tbody.innerHTML = rows.map(r => `<tr>
+      <td style="white-space:nowrap">${fmtDate(r.created_at)}</td>
+      <td>${esc(r.subject)}</td>
+      <td class="mono">${r.sent_count}${r.failed_count > 0 ? ' <span style="color:var(--red)">(' + r.failed_count + ' fehlgeschlagen)</span>' : ''}</td>
+      <td><button class="btn" style="font-size:0.75rem;padding:4px 10px;background:var(--ink);color:var(--kreide);" onclick="showPastUpdate(${r.id})">Anzeigen</button></td>
+    </tr>`).join('');
+    // Store for detail view
+    window._updateHistory = rows;
+  } catch (e) {
+    // silently ignore if table doesn't exist yet
+  }
+}
+
+function showPastUpdate(id) {
+  const r = (window._updateHistory || []).find(u => u.id === id);
+  if (!r) return;
+  document.getElementById('update-subject').value = r.subject;
+  document.getElementById('update-mail-body').innerHTML = r.body_html;
+  document.getElementById('update-linkedin').value = r.linkedin_post || '';
+  document.getElementById('update-recipients').textContent = `Gesendet am ${fmtDate(r.created_at)} an ${r.sent_count} Empfaenger`;
+  document.getElementById('update-preview').style.display = 'block';
+}
+
+function loadAll() { loadOverview(); loadActivity(); loadAllowlist(); loadWaitlist(); loadSwitches(); loadUpdateHistory(); }
 </script>
 </body>
 </html>

@@ -765,6 +765,7 @@ class WeeklyUpdateRequest(BaseModel):
 class WeeklyUpdateSendRequest(BaseModel):
     subject: str
     body_html: str
+    linkedin_post: str = ""
 
 
 @router.post("/weekly-update/generate")
@@ -1009,7 +1010,49 @@ def send_weekly_update(
             errors.append(email)
         _time.sleep(0.1)  # Resend rate limit
 
+    # Persist to history
+    from gridbert.storage.schema import weekly_updates
+
+    conn.execute(weekly_updates.insert().values(
+        subject=req.subject,
+        body_html=req.body_html,
+        linkedin_post=req.linkedin_post,
+        sent_count=sent,
+        failed_count=failed,
+    ))
+    conn.commit()
+
     return {"sent": sent, "failed": failed, "errors": errors}
+
+
+@router.get("/weekly-update/history")
+def weekly_update_history(
+    conn: DbConn,
+    authorization: str | None = Header(None),
+    limit_count: int = Query(10, alias="limit", le=50),
+) -> list[dict[str, Any]]:
+    """List previously sent weekly updates (newest first)."""
+    _verify_admin(conn, authorization)
+    from gridbert.storage.schema import weekly_updates
+
+    rows = conn.execute(
+        select(weekly_updates)
+        .order_by(desc(weekly_updates.c.created_at))
+        .limit(limit_count)
+    ).mappings().all()
+
+    return [
+        {
+            "id": r["id"],
+            "subject": r["subject"],
+            "body_html": r["body_html"],
+            "linkedin_post": r["linkedin_post"],
+            "sent_count": r["sent_count"],
+            "failed_count": r["failed_count"],
+            "created_at": str(r["created_at"]) if r["created_at"] else None,
+        }
+        for r in rows
+    ]
 
 
 # --- Switching Queue ----------------------------------------------------------

@@ -184,3 +184,17 @@ switching_requests = Table(
     Column("created_at", DateTime, server_default=func.now()),
     Column("completed_at", DateTime, nullable=True),
 )
+
+# --- Weekly Updates (sent history) --------------------------------------------
+
+weekly_updates = Table(
+    "weekly_updates",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("subject", String, nullable=False),
+    Column("body_html", Text, nullable=False),
+    Column("linkedin_post", Text, default=""),
+    Column("sent_count", Integer, default=0),
+    Column("failed_count", Integer, default=0),
+    Column("created_at", DateTime, server_default=func.now()),
+)
